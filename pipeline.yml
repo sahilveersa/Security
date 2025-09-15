@@ -1,0 +1,115 @@
+# azure-pipelines.yml
+trigger:
+- none
+
+parameters:
+- name: environment
+  displayName: Environment to scan
+  type: string
+  default: 'dev'
+  values:
+  - 'dev'
+  - 'qa'
+  - 'prod'
+
+- name: scanType
+  displayName: Type of ZAP scan
+  type: string
+  default: 'baseline'
+  values:
+  - 'baseline'
+  - 'full'
+  - 'api'
+
+- name: reportTemplate
+  displayName: ZAP Report Template
+  type: string
+  default: 'modern'
+  values:
+  - 'modern'
+  - 'traditional-html'
+  - 'traditional-html-plus'
+  - 'traditional-json'
+  - 'sarif-json'
+  - 'pdf' 
+
+variables:
+  devUrl: 'http://testphp.vulnweb.com'
+  qaUrl: 'http://my-qa-app.com'
+  prodUrl: 'http://my-prod-app.com'
+
+stages:
+- stage: ZAP_Scan_Stage
+  displayName: 'Run ZAP Scan'
+  jobs:
+  - job: ZAP_Scan_Job
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    steps:
+    - script: |
+        echo "Starting ZAP Scan..."
+        echo "Environment: ${{ parameters.environment }}"
+        echo "Scan Type: ${{ parameters.scanType }}"
+        echo "Report Template: ${{ parameters.reportTemplate }}"
+
+        # Pick target URL
+        if [ "${{ parameters.environment }}" == "dev" ]; then
+          TARGET_URL="${{ variables.devUrl }}"
+        elif [ "${{ parameters.environment }}" == "qa" ]; then
+          TARGET_URL="${{ variables.qaUrl }}"
+        elif [ "${{ parameters.environment }}" == "prod" ]; then
+          TARGET_URL="${{ variables.prodUrl }}"
+        else
+          echo "Invalid environment"; exit 1
+        fi
+
+        # Decide report extension
+        case "${{ parameters.reportTemplate }}" in
+          modern|traditional-html|traditional-html-plus)
+            EXT="html";;
+          traditional-json|sarif-json)
+            EXT="json";;
+          pdf)
+            EXT="pdf";;
+          *) EXT="html";;
+        esac
+
+        REPORT_FILENAME="zap_${{ parameters.scanType }}_report.${EXT}"
+
+        # Base docker command
+        ZAP_CMD="docker run --rm -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
+
+        # Choose scan type
+        if [ "${{ parameters.scanType }}" == "baseline" ]; then
+          ZAP_CMD+=" zap-baseline.py"
+        elif [ "${{ parameters.scanType }}" == "full" ]; then
+          ZAP_CMD+=" zap-full-scan.py"
+        elif [ "${{ parameters.scanType }}" == "api" ]; then
+          # Replace with your API spec URL
+          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs"
+        fi
+
+        ZAP_CMD+=" -t $TARGET_URL"
+
+        # Handle report type
+        if [ "${{ parameters.reportTemplate }}" == "pdf" ]; then
+          # PDF requires the report add-on
+          ZAP_CMD+=" -z \"-addoninstall report\""
+          ZAP_CMD+=" -z \"-reportformat pdf\""
+          ZAP_CMD+=" -z \"-reportfile /zap/wrk/$REPORT_FILENAME\""
+        else
+          # Normal HTML/JSON reports
+          ZAP_CMD+=" -r $REPORT_FILENAME"
+          ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
+        fi
+
+        echo "Executing: $ZAP_CMD"
+        $ZAP_CMD
+      displayName: 'Run ZAP Scan with Docker'
+
+    - publish: '$(System.DefaultWorkingDirectory)/$(REPORT_FILENAME)'
+      artifact: 'ZAP_Reports_${{ parameters.environment }}'
+      displayName: 'Publish ZAP Scan Report'
+      condition: always()
+ 
