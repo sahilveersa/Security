@@ -24,12 +24,10 @@ parameters:
 - name: reportTemplate
   displayName: ZAP Report Template
   type: string
-  default: 'tradtional-html'
+  default: 'traditional-html'
   values:
     # Using exact template IDs from ZAP's output for correctness
-#  - modern
   - traditional-html
-#  - traditional-html-plus
   - traditional-json
   - sarif-json
   - traditional-pdf # Corrected from 'pdf' to 'traditional-pdf'
