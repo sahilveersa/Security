@@ -77,17 +77,20 @@ stages:
 
         REPORT_FILENAME="zap_${{ parameters.scanType }}_report.${EXT}"
 
+        # Export report filename to pipeline
+        echo "##vso[task.setvariable variable=REPORT_FILENAME]$REPORT_FILENAME"
+
         # Base docker command
         ZAP_CMD="docker run --rm -u $(id -u):$(id -g) -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
 
         # Choose scan type
         if [ "${{ parameters.scanType }}" == "baseline" ]; then
-          ZAP_CMD+=" zap-baseline.py"
+          ZAP_CMD+=" zap-baseline.py -w /zap/wrk/zap.yaml"
         elif [ "${{ parameters.scanType }}" == "full" ]; then
-          ZAP_CMD+=" zap-full-scan.py"
+          ZAP_CMD+=" zap-full-scan.py -w /zap/wrk/zap.yaml"
         elif [ "${{ parameters.scanType }}" == "api" ]; then
           # Replace with your API spec URL
-          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs"
+          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs -w /zap/wrk/zap.yaml"
         fi
 
         ZAP_CMD+=" -t $TARGET_URL"
@@ -101,7 +104,7 @@ stages:
         else
           # Normal HTML/JSON reports
           ZAP_CMD+=" -r $REPORT_FILENAME"
-          ZAP_CMD+=" -z -config report.template=${{ parameters.reportTemplate }}"
+          ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
         fi
 
         echo "Executing: $ZAP_CMD"
@@ -112,4 +115,3 @@ stages:
       artifact: 'ZAP_Reports_${{ parameters.environment }}'
       displayName: 'Publish ZAP Scan Report'
       condition: always()
- 
