@@ -51,7 +51,9 @@ steps:
         parameters:
           url: '${{ parameters.targetUrl }}'
           maxDuration: 5
-          failIfFoundUrlsLessThan: 5
+          # FIXED: 'failIfFoundUrlsLessThan' is a boolean, the count is a separate param
+          failIfFoundUrlsLessThan: true
+          foundUrlsLessThan: 5
       - type: passiveScan-wait
     EOF
     elif [ "${{ parameters.scanType }}" == "full" ]; then
@@ -97,8 +99,6 @@ steps:
     # ========================================================================
     # Run the ZAP Docker container with the automation framework
     # ========================================================================
-    # The new command runs in the foreground, simplifying the script.
-    # We add '-addoninstall report-generation' to ensure PDF dependencies are present.
     docker run --rm \
       -v $(pwd):/zap/wrk/:rw \
       --user root \
