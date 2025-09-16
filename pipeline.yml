@@ -77,6 +77,13 @@ stages:
 
         REPORT_FILENAME="zap_${{ parameters.scanType }}_report.${EXT}"
 
+        # Work dir inside pipeline
+        mkdir -p $(Build.ArtifactStagingDirectory)
+        cd $(Build.ArtifactStagingDirectory)
+
+        # Create a writable zap.yaml
+        echo "{}" > zap.yaml
+
         # Base docker command
         ZAP_CMD="docker run --rm -u $(id -u):$(id -g) -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
 
@@ -86,11 +93,13 @@ stages:
         elif [ "${{ parameters.scanType }}" == "full" ]; then
           ZAP_CMD+=" zap-full-scan.py"
         elif [ "${{ parameters.scanType }}" == "api" ]; then
-          # Replace with your API spec URL
           ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs"
         fi
 
         ZAP_CMD+=" -t $TARGET_URL"
+
+        # Force ZAP to use our writable zap.yaml
+        ZAP_CMD+=" -w /zap/wrk/zap.yaml"
 
         # Handle report type
         if [ "${{ parameters.reportTemplate }}" == "pdf" ]; then
@@ -102,14 +111,11 @@ stages:
           ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
         fi
 
-        # Always disable automation add-on to avoid zap.yaml permission issue
-        ZAP_CMD+=" -z \"-addonuninstall automation\""
-
         echo "Executing: $ZAP_CMD"
         $ZAP_CMD
       displayName: 'Run ZAP Scan with Docker'
 
-    - publish: '$(System.DefaultWorkingDirectory)/$(REPORT_FILENAME)'
+    - publish: '$(Build.ArtifactStagingDirectory)'
       artifact: 'ZAP_Reports_${{ parameters.environment }}'
       displayName: 'Publish ZAP Scan Report'
       condition: always()
