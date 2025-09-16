@@ -3,75 +3,118 @@ trigger:
 - none
 
 parameters:
-- name: targetApp
-  displayName: Target Application(s) to scan
+- name: adminUrl
+  displayName: "Admin URL"
   type: string
-  default: 'agent'
-  values:
-  - 'admin'
-  - 'agent'
-  - 'both'
+  default: "http://my-admin-app.com"
+
+- name: agentUrl
+  displayName: "Agent URL"
+  type: string
+  default: "http://my-agent-app.com"
 
 - name: scanType
-  displayName: Type of ZAP scan
+  displayName: "Type of ZAP scan"
   type: string
-  default: 'baseline'
+  default: "baseline"
   values:
   - 'baseline'
   - 'full'
   - 'api'
 
 - name: reportTemplate
-  displayName: ZAP Report Template
+  displayName: "ZAP Report Template"
   type: string
-  default: 'modern'
+  default: "modern"
   values:
   - 'modern'
   - 'traditional-html'
   - 'traditional-html-plus'
-  - 'traditional-json'
-  - 'sarif-json'
   - 'pdf'
-
-- name: adminUrl
-  displayName: Admin Application URL
-  type: string
-  default: 'https://qa.app-np.neovance.com/'
-
-- name: agentUrl
-  displayName: Agent Application URL
-  type: string
-  default: 'https://qa-agent.app-np.neovance.com/'
 
 stages:
 - stage: ZAP_Scan_Stage
-  displayName: "Run ZAP Scan"
+  displayName: "Run ZAP Scans"
   jobs:
 
-  # Run admin scan only if chosen
-  - job: AdminScan
-    displayName: "ZAP Scan - Admin"
-    condition: or(eq('${{ parameters.targetApp }}','admin'), eq('${{ parameters.targetApp }}','both'))
+  - job: ZAP_Admin
+    displayName: "Run ZAP Scan on Admin"
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: "ubuntu-latest"
     steps:
-    - template: zap-template.yml
-      parameters:
-        targetUrl: ${{ parameters.adminUrl }}
-        appName: 'admin'
-        scanType: ${{ parameters.scanType }}
-        reportTemplate: ${{ parameters.reportTemplate }}
+    - script: |
+        echo "Starting ZAP Admin Scan..."
+        mkdir -p $(Build.ArtifactStagingDirectory)/admin-reports
+        chmod 777 $(Build.ArtifactStagingDirectory)/admin-reports
 
-  # Run agent scan only if chosen
-  - job: AgentScan
-    displayName: "ZAP Scan - Agent"
-    condition: or(eq('${{ parameters.targetApp }}','agent'), eq('${{ parameters.targetApp }}','both'))
+        TARGET_URL="${{ parameters.adminUrl }}"
+        REPORT_HTML="zap_admin_${{ parameters.scanType }}_report.html"
+        REPORT_JSON="zap_admin_${{ parameters.scanType }}_report.json"
+        REPORT_PDF="zap_admin_${{ parameters.scanType }}_report.pdf"
+
+        if [ "${{ parameters.scanType }}" == "baseline" ]; then
+          SCAN_CMD="zap-baseline.py -t $TARGET_URL -r $REPORT_HTML -J $REPORT_JSON"
+        elif [ "${{ parameters.scanType }}" == "full" ]; then
+          SCAN_CMD="zap-full-scan.py -t $TARGET_URL -r $REPORT_HTML -J $REPORT_JSON"
+        else
+          SCAN_CMD="zap-api-scan.py -t $TARGET_URL -f openapi -r $REPORT_HTML -J $REPORT_JSON"
+        fi
+
+        docker run --rm \
+          -v $(Build.ArtifactStagingDirectory)/admin-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          $SCAN_CMD
+
+        # Generate PDF separately
+        docker run --rm \
+          -v $(Build.ArtifactStagingDirectory)/admin-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-cli --zap-url http://localhost --zap-port 8080 \
+          -p report.generate /zap/wrk/$REPORT_PDF -f pdf
+      displayName: "Run ZAP Admin Scan"
+
+    - publish: "$(Build.ArtifactStagingDirectory)/admin-reports"
+      artifact: "ZAP_Reports_admin"
+      displayName: "Publish ZAP Admin Reports"
+      condition: always()
+
+  - job: ZAP_Agent
+    displayName: "Run ZAP Scan on Agent"
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: "ubuntu-latest"
     steps:
-    - template: zap-template.yml
-      parameters:
-        targetUrl: ${{ parameters.agentUrl }}
-        appName: 'agent'
-        scanType: ${{ parameters.scanType }}
-        reportTemplate: ${{ parameters.reportTemplate }}
+    - script: |
+        echo "Starting ZAP Agent Scan..."
+        mkdir -p $(Build.ArtifactStagingDirectory)/agent-reports
+        chmod 777 $(Build.ArtifactStagingDirectory)/agent-reports
+
+        TARGET_URL="${{ parameters.agentUrl }}"
+        REPORT_HTML="zap_agent_${{ parameters.scanType }}_report.html"
+        REPORT_JSON="zap_agent_${{ parameters.scanType }}_report.json"
+        REPORT_PDF="zap_agent_${{ parameters.scanType }}_report.pdf"
+
+        if [ "${{ parameters.scanType }}" == "baseline" ]; then
+          SCAN_CMD="zap-baseline.py -t $TARGET_URL -r $REPORT_HTML -J $REPORT_JSON"
+        elif [ "${{ parameters.scanType }}" == "full" ]; then
+          SCAN_CMD="zap-full-scan.py -t $TARGET_URL -r $REPORT_HTML -J $REPORT_JSON"
+        else
+          SCAN_CMD="zap-api-scan.py -t $TARGET_URL -f openapi -r $REPORT_HTML -J $REPORT_JSON"
+        fi
+
+        docker run --rm \
+          -v $(Build.ArtifactStagingDirectory)/agent-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          $SCAN_CMD
+
+        # Generate PDF separately
+        docker run --rm \
+          -v $(Build.ArtifactStagingDirectory)/agent-reports:/zap/wrk:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-cli --zap-url http://localhost --zap-port 8080 \
+          -p report.generate /zap/wrk/$REPORT_PDF -f pdf
+      displayName: "Run ZAP Agent Scan"
+
+    - publish: "$(Build.ArtifactStagingDirectory)/agent-reports"
+      artifact: "ZAP_Reports_agent"
+      displayName: "Publish ZAP Agent Reports"
+      condition: always()
