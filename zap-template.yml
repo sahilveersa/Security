@@ -1,0 +1,87 @@
+# zap-template.yml
+parameters:
+  - name: targetUrl
+    type: string
+  - name: appName
+    type: string
+  - name: scanType
+    type: string
+  - name: reportTemplate
+    type: string
+
+steps:
+- script: |
+    echo "Starting ZAP Scan for ${{ parameters.appName }}..."
+    echo "Target URL: ${{ parameters.targetUrl }}"
+    echo "Scan Type: ${{ parameters.scanType }}"
+    echo "Report Template: ${{ parameters.reportTemplate }}"
+
+    mkdir -p $(Build.ArtifactStagingDirectory)/zap-reports
+    cd $(Build.ArtifactStagingDirectory)/zap-reports
+
+    CONTAINER_ID=""
+    if [ "${{ parameters.scanType }}" == "baseline" ]; then
+      CONTAINER_ID=$(docker run -d --rm \
+        -v $(pwd):/zap/wrk:rw \
+        --user root \
+        ghcr.io/zaproxy/zaproxy:stable \
+        zap-baseline.py \
+        -t "${{ parameters.targetUrl }}" \
+        -r report.html \
+        -J report.json \
+        -d)
+    elif [ "${{ parameters.scanType }}" == "full" ]; then
+      CONTAINER_ID=$(docker run -d --rm \
+        -v $(pwd):/zap/wrk:rw \
+        --user root \
+        ghcr.io/zaproxy/zaproxy:stable \
+        zap-full-scan.py \
+        -t "${{ parameters.targetUrl }}" \
+        -r report.html \
+        -J report.json \
+        -d)
+    elif [ "${{ parameters.scanType }}" == "api" ]; then
+      CONTAINER_ID=$(docker run -d --rm \
+        -v $(pwd):/zap/wrk:rw \
+        --user root \
+        ghcr.io/zaproxy/zaproxy:stable \
+        zap-api-scan.py \
+        -t "${{ parameters.targetUrl }}" \
+        -f openapi \
+        -r report.html \
+        -J report.json \
+        -d)
+    fi
+
+    echo "Waiting for ZAP scan container to finish..."
+    docker logs -f $CONTAINER_ID || true
+    docker wait $CONTAINER_ID || true
+
+    # Rename with app identifier
+    if [ -f "report.html" ]; then
+      mv report.html zap_${{ parameters.appName }}_${{ parameters.scanType }}_report.html
+    fi
+    if [ -f "report.json" ]; then
+      mv report.json zap_${{ parameters.appName }}_${{ parameters.scanType }}_report.json
+    fi
+
+    echo "Reports generated:"
+    ls -la
+
+  displayName: "Run ZAP Scan"
+
+- publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
+  artifact: 'ZAP_Reports_${{ parameters.appName }}'
+  displayName: 'Publish ZAP Scan Reports'
+
+- task: PublishTestResults@2
+  displayName: 'Publish ZAP Test Results'
+  inputs:
+    testResultsFormat: 'JUnit'
+    testResultsFiles: '**/zap_*_${{ parameters.appName }}_report.xml'
+    searchFolder: '$(Build.ArtifactStagingDirectory)/zap-reports'
+    mergeTestResults: false
+    failTaskOnFailedTests: false
+    testRunTitle: 'ZAP Security Scan Results - ${{ parameters.appName }}'
+  condition: always()
+  continueOnError: true

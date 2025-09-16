@@ -1,15 +1,17 @@
 # azure-pipelines.yml
 trigger:
 - none
+
 parameters:
-- name: environment
-  displayName: Environment to scan
+- name: targetApp
+  displayName: Target Application(s) to scan
   type: string
-  default: 'dev'
+  default: 'agent'
   values:
-  - 'dev'
-  - 'qa'
-  - 'prod'
+  - 'admin'
+  - 'agent'
+  - 'both'
+
 - name: scanType
   displayName: Type of ZAP scan
   type: string
@@ -18,6 +20,7 @@ parameters:
   - 'baseline'
   - 'full'
   - 'api'
+
 - name: reportTemplate
   displayName: ZAP Report Template
   type: string
@@ -28,174 +31,47 @@ parameters:
   - 'traditional-html-plus'
   - 'traditional-json'
   - 'sarif-json'
-  - 'pdf' 
-variables:
-  devUrl: 'http://testphp.vulnweb.com'
-  qaUrl: 'https://qa-agent.app-np.neovance.com/'
-  prodUrl: 'http://my-prod-app.com'
+  - 'pdf'
+
+- name: adminUrl
+  displayName: Admin Application URL
+  type: string
+  default: 'https://admin.app-np.neovance.com/'
+
+- name: agentUrl
+  displayName: Agent Application URL
+  type: string
+  default: 'https://qa-agent.app-np.neovance.com/'
+
 stages:
 - stage: ZAP_Scan_Stage
-  displayName: 'Run ZAP Scan'
+  displayName: "Run ZAP Scan"
   jobs:
-  - job: ZAP_Scan_Job
+
+  # Run admin scan only if chosen
+  - job: AdminScan
+    displayName: "ZAP Scan - Admin"
+    condition: or(eq('${{ parameters.targetApp }}','admin'), eq('${{ parameters.targetApp }}','both'))
     pool:
       vmImage: 'ubuntu-latest'
     steps:
-    - script: |
-        echo "Starting ZAP Scan..."
-        echo "Environment: ${{ parameters.environment }}"
-        echo "Scan Type: ${{ parameters.scanType }}"
-        echo "Report Template: ${{ parameters.reportTemplate }}"
-        
-        # Pick target URL
-        if [ "${{ parameters.environment }}" == "dev" ]; then
-          TARGET_URL="${{ variables.devUrl }}"
-        elif [ "${{ parameters.environment }}" == "qa" ]; then
-          TARGET_URL="${{ variables.qaUrl }}"
-        elif [ "${{ parameters.environment }}" == "prod" ]; then
-          TARGET_URL="${{ variables.prodUrl }}"
-        else
-          echo "Invalid environment"; exit 1
-        fi
-        
-        echo "Target URL: $TARGET_URL"
-        
-        # Work dir inside pipeline  
-        mkdir -p $(Build.ArtifactStagingDirectory)
-        cd $(Build.ArtifactStagingDirectory)
-        
-        # Create a writable directory with full permissions
-        mkdir -p zap-reports
-        chmod 777 zap-reports
-        
-        echo "Working directory: $(pwd)"
-        echo "ZAP reports directory: $(pwd)/zap-reports"
-        
-        # Run ZAP scan with output redirected and no config file generation
-        CONTAINER_ID=""
-        
-        if [ "${{ parameters.scanType }}" == "baseline" ]; then
-          echo "Running ZAP Baseline Scan..."
-          CONTAINER_ID=$(docker run -d --rm \
-            -v $(pwd)/zap-reports:/zap/wrk:rw \
-            --user root \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-            -t $TARGET_URL \
-            -r report.html \
-            -x report.xml \
-            -J report.json \
-            -d)
-            
-        elif [ "${{ parameters.scanType }}" == "full" ]; then
-          echo "Running ZAP Full Scan..."
-          CONTAINER_ID=$(docker run -d --rm \
-            -v $(pwd)/zap-reports:/zap/wrk:rw \
-            --user root \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-full-scan.py \
-            -t $TARGET_URL \
-            -r /zap/wrk/report.html \
-            -x /zap/wrk/report.xml \
-            -J /zap/wrk/report.json \
-            -d)
-            
-        elif [ "${{ parameters.scanType }}" == "api" ]; then
-          echo "Running ZAP API Scan..."
-          CONTAINER_ID=$(docker run -d --rm \
-            -v $(pwd)/zap-reports:/zap/wrk:rw \
-            --user root \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-api-scan.py \
-            -t $TARGET_URL \
-            -f openapi \
-            -r /zap/wrk/report.html \
-            -x /zap/wrk/report.xml \
-            -J /zap/wrk/report.json \
-            -d)
-        fi
-        
-        echo "Container ID: $CONTAINER_ID"
-        echo "Waiting for ZAP scan to complete..."
-        
-        # Wait for container to finish and get logs
-        docker logs -f $CONTAINER_ID || true
-        docker wait $CONTAINER_ID || true
-        
-        echo "ZAP scan completed. Checking generated files..."
-        ls -la zap-reports/
-        
-        # Fix permissions on generated files
-        sudo chown -R $(whoami):$(whoami) zap-reports/ || true
-        chmod -R 644 zap-reports/* || true
-        
-        # Move files to staging directory and rename appropriately
-        REPORT_CREATED=false
-        
-        if [ -f "zap-reports/report.html" ]; then
-          cp "zap-reports/report.html" "zap_${{ parameters.scanType }}_report.html"
-          echo "✅ HTML report created: zap_${{ parameters.scanType }}_report.html"
-          echo "Report size: $(du -h zap_${{ parameters.scanType }}_report.html)"
-          REPORT_CREATED=true
-        fi
-        
-        if [ -f "zap-reports/report.xml" ]; then
-          cp "zap-reports/report.xml" "zap_${{ parameters.scanType }}_report.xml"
-          echo "✅ XML report created: zap_${{ parameters.scanType }}_report.xml"
-          echo "Report size: $(du -h zap_${{ parameters.scanType }}_report.xml)"
-          REPORT_CREATED=true
-        fi
-        
-        if [ -f "zap-reports/report.json" ]; then
-          cp "zap-reports/report.json" "zap_${{ parameters.scanType }}_report.json"
-          echo "✅ JSON report created: zap_${{ parameters.scanType }}_report.json"
-          echo "Report size: $(du -h zap_${{ parameters.scanType }}_report.json)"
-          REPORT_CREATED=true
-        fi
-        
-        # Copy any other files that were generated
-        if [ "$(ls -A zap-reports/)" ]; then
-          echo "Additional files found in zap-reports:"
-          ls -la zap-reports/
-          cp zap-reports/* . 2>/dev/null || true
-        fi
-        
-        # Final file listing
-        echo "Final files in artifact directory:"
-        ls -la
-        
-        if [ "$REPORT_CREATED" = true ]; then
-          echo "🎉 ZAP scan completed successfully!"
-          # Determine which report to highlight based on template preference
-          case "${{ parameters.reportTemplate }}" in
-            traditional-json|sarif-json)
-              echo "Primary report: zap_${{ parameters.scanType }}_report.json"
-              ;;
-            *)
-              echo "Primary report: zap_${{ parameters.scanType }}_report.html"
-              ;;
-          esac
-        else
-          echo "❌ No reports were generated"
-          echo "Check if the target URL is accessible: $TARGET_URL"
-          exit 1
-        fi
-        
-      displayName: 'Run ZAP Scan with Docker'
-      
-    - publish: '$(Build.ArtifactStagingDirectory)'
-      artifact: 'ZAP_Reports_${{ parameters.environment }}'
-      displayName: 'Publish ZAP Scan Reports'
-      condition: always()
-      
-    - task: PublishTestResults@2
-      displayName: 'Publish ZAP Test Results'
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/zap_*_report.xml'
-        searchFolder: '$(Build.ArtifactStagingDirectory)'
-        mergeTestResults: false
-        failTaskOnFailedTests: false
-        testRunTitle: 'ZAP Security Scan Results - ${{ parameters.environment }}'
-      condition: and(always(), contains(variables['Agent.JobStatus'], 'Succeeded'))
-      continueOnError: true
+    - template: zap-template.yml
+      parameters:
+        targetUrl: ${{ parameters.adminUrl }}
+        appName: 'admin'
+        scanType: ${{ parameters.scanType }}
+        reportTemplate: ${{ parameters.reportTemplate }}
+
+  # Run agent scan only if chosen
+  - job: AgentScan
+    displayName: "ZAP Scan - Agent"
+    condition: or(eq('${{ parameters.targetApp }}','agent'), eq('${{ parameters.targetApp }}','both'))
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - template: zap-template.yml
+      parameters:
+        targetUrl: ${{ parameters.agentUrl }}
+        appName: 'agent'
+        scanType: ${{ parameters.scanType }}
+        reportTemplate: ${{ parameters.reportTemplate }}
