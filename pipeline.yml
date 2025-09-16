@@ -43,12 +43,22 @@ parameters:
   type: string
   default: 'https://qa-agent.app-np.neovance.com/'
 
+- name: adminApiSpec
+  displayName: Admin API OpenAPI URL
+  type: string
+  default: 'https://qa.app-np.neovance.com/swagger.json'
+
+- name: agentApiSpec
+  displayName: Agent API OpenAPI URL
+  type: string
+  default: 'https://qa-agent.app-np.neovance.com/swagger.json'
+
 stages:
 - stage: ZAP_Scan_Stage
   displayName: "Run ZAP Scan"
   jobs:
 
-  # Run admin scan only if chosen
+  # Admin Scan
   - job: AdminScan
     displayName: "ZAP Scan - Admin"
     condition: or(eq('${{ parameters.targetApp }}','admin'), eq('${{ parameters.targetApp }}','both'))
@@ -58,11 +68,12 @@ stages:
     - template: zap-template.yml
       parameters:
         targetUrl: ${{ parameters.adminUrl }}
+        apiSpecUrl: ${{ parameters.adminApiSpec }}
         appName: 'admin'
         scanType: ${{ parameters.scanType }}
         reportTemplate: ${{ parameters.reportTemplate }}
 
-  # Run agent scan only if chosen
+  # Agent Scan
   - job: AgentScan
     displayName: "ZAP Scan - Agent"
     condition: or(eq('${{ parameters.targetApp }}','agent'), eq('${{ parameters.targetApp }}','both'))
@@ -72,6 +83,7 @@ stages:
     - template: zap-template.yml
       parameters:
         targetUrl: ${{ parameters.agentUrl }}
+        apiSpecUrl: ${{ parameters.agentApiSpec }}
         appName: 'agent'
         scanType: ${{ parameters.scanType }}
         reportTemplate: ${{ parameters.reportTemplate }}
