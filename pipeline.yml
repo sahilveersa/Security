@@ -77,35 +77,33 @@ stages:
 
         REPORT_FILENAME="zap_${{ parameters.scanType }}_report.${EXT}"
 
-        # Export report filename to pipeline
-        echo "##vso[task.setvariable variable=REPORT_FILENAME]$REPORT_FILENAME"
-
         # Base docker command
         ZAP_CMD="docker run --rm -u $(id -u):$(id -g) -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
 
         # Choose scan type
         if [ "${{ parameters.scanType }}" == "baseline" ]; then
-          ZAP_CMD+=" zap-baseline.py -w /zap/wrk/zap.yaml"
+          ZAP_CMD+=" zap-baseline.py"
         elif [ "${{ parameters.scanType }}" == "full" ]; then
-          ZAP_CMD+=" zap-full-scan.py -w /zap/wrk/zap.yaml"
+          ZAP_CMD+=" zap-full-scan.py"
         elif [ "${{ parameters.scanType }}" == "api" ]; then
           # Replace with your API spec URL
-          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs -w /zap/wrk/zap.yaml"
+          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs"
         fi
 
         ZAP_CMD+=" -t $TARGET_URL"
 
         # Handle report type
         if [ "${{ parameters.reportTemplate }}" == "pdf" ]; then
-          # PDF requires the report add-on
           ZAP_CMD+=" -z \"-addoninstall report\""
           ZAP_CMD+=" -z \"-reportformat pdf\""
           ZAP_CMD+=" -z \"-reportfile /zap/wrk/$REPORT_FILENAME\""
         else
-          # Normal HTML/JSON reports
           ZAP_CMD+=" -r $REPORT_FILENAME"
           ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
         fi
+
+        # Always disable automation add-on to avoid zap.yaml permission issue
+        ZAP_CMD+=" -z \"-addonuninstall automation\""
 
         echo "Executing: $ZAP_CMD"
         $ZAP_CMD
