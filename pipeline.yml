@@ -52,7 +52,7 @@ stages:
         echo "Environment: ${{ parameters.environment }}"
         echo "Scan Type: ${{ parameters.scanType }}"
         echo "Report Template: ${{ parameters.reportTemplate }}"
-
+        
         # Pick target URL
         if [ "${{ parameters.environment }}" == "dev" ]; then
           TARGET_URL="${{ variables.devUrl }}"
@@ -63,7 +63,7 @@ stages:
         else
           echo "Invalid environment"; exit 1
         fi
-
+        
         # Decide report extension
         case "${{ parameters.reportTemplate }}" in
           modern|traditional-html|traditional-html-plus)
@@ -74,19 +74,20 @@ stages:
             EXT="pdf";;
           *) EXT="html";;
         esac
-
+        
         REPORT_FILENAME="zap_${{ parameters.scanType }}_report.${EXT}"
-
+        
         # Work dir inside pipeline
         mkdir -p $(Build.ArtifactStagingDirectory)
         cd $(Build.ArtifactStagingDirectory)
-
-        # Create a writable zap.yaml
-        echo "{}" > zap.yaml
-
-        # Base docker command
-        ZAP_CMD="docker run --rm -u $(id -u):$(id -g) -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
-
+        
+        # Create a minimal zap.yaml in the working directory
+        echo "# ZAP Configuration" > zap.yaml
+        chmod 666 zap.yaml
+        
+        # Base docker command without user mapping to avoid permission issues
+        ZAP_CMD="docker run --rm -v $(pwd):/zap/wrk:rw ghcr.io/zaproxy/zaproxy:stable"
+        
         # Choose scan type
         if [ "${{ parameters.scanType }}" == "baseline" ]; then
           ZAP_CMD+=" zap-baseline.py"
@@ -95,12 +96,10 @@ stages:
         elif [ "${{ parameters.scanType }}" == "api" ]; then
           ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs"
         fi
-
+        
         ZAP_CMD+=" -t $TARGET_URL"
-
-        # Force ZAP to use our writable zap.yaml
-        ZAP_CMD+=" -w /zap/wrk/zap.yaml"
-
+        # Don't use -w flag, let ZAP use its default config location
+        
         # Handle report type
         if [ "${{ parameters.reportTemplate }}" == "pdf" ]; then
           ZAP_CMD+=" -z \"-addoninstall report\""
@@ -108,14 +107,12 @@ stages:
           ZAP_CMD+=" -z \"-reportfile /zap/wrk/$REPORT_FILENAME\""
         else
           ZAP_CMD+=" -r $REPORT_FILENAME"
-          ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
+          if [ "${{ parameters.reportTemplate }}" != "modern" ]; then
+            ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
+          fi
         fi
-
+        
         echo "Executing: $ZAP_CMD"
-        $ZAP_CMD
+        eval $ZAP_CMD
+        
       displayName: 'Run ZAP Scan with Docker'
-
-    - publish: '$(Build.ArtifactStagingDirectory)'
-      artifact: 'ZAP_Reports_${{ parameters.environment }}'
-      displayName: 'Publish ZAP Scan Report'
-      condition: always()
