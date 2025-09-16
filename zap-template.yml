@@ -84,27 +84,15 @@ steps:
 
     # --- Common Reporting Job ---
     # This job is added to all scan types
-    # --- Always generate a traditional-json report ---
     cat <<EOF >> $AUTOMATION_FILE
       - type: report
         parameters:
-        template: 'traditional-json'
-        reportDir: '/zap/wrk/'
-        reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}_traditional-json'
-        displayReport: false
+          template: '${{ parameters.reportTemplate }}'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}'
+          displayReport: false
     EOF
 
-    # --- Conditionally generate a second report based on the user's selection ---
-    if [ "${{ parameters.reportTemplate }}" != "traditional-json" ]; then
-     cat <<EOF >> $AUTOMATION_FILE
-    - type: report
-      parameters:
-        template: '${{ parameters.reportTemplate }}'
-        reportDir: '/zap/wrk/'
-        reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}_${{ parameters.reportTemplate }}'
-        displayReport: false
-       EOF
-    fi
     echo "Generated Automation Plan:"
     cat $AUTOMATION_FILE
 
