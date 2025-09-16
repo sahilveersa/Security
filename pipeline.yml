@@ -27,9 +27,9 @@ parameters:
   default: 'modern'
   values:
     # Using exact template IDs from ZAP's output for correctness
-  - modern
+#  - modern
   - traditional-html
-  - traditional-html-plus
+#  - traditional-html-plus
   - traditional-json
   - sarif-json
   - traditional-pdf # Corrected from 'pdf' to 'traditional-pdf'
