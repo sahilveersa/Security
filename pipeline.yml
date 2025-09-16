@@ -35,7 +35,7 @@ parameters:
 
 variables:
   devUrl: 'http://testphp.vulnweb.com'
-  qaUrl: 'http://my-qa-app.com'
+  qaUrl: 'https://qa-agent.app-np.neovance.com/'
   prodUrl: 'http://my-prod-app.com'
 
 stages:
