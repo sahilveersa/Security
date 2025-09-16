@@ -78,7 +78,7 @@ stages:
         REPORT_FILENAME="zap_${{ parameters.scanType }}_report.${EXT}"
 
         # Base docker command
-        ZAP_CMD="docker run --rm -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
+        ZAP_CMD="docker run --rm -u $(id -u):$(id -g) -v $(pwd):/zap/wrk ghcr.io/zaproxy/zaproxy:stable"
 
         # Choose scan type
         if [ "${{ parameters.scanType }}" == "baseline" ]; then
@@ -101,7 +101,7 @@ stages:
         else
           # Normal HTML/JSON reports
           ZAP_CMD+=" -r $REPORT_FILENAME"
-          ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
+          ZAP_CMD+=" -z -config report.template=${{ parameters.reportTemplate }}"
         fi
 
         echo "Executing: $ZAP_CMD"
