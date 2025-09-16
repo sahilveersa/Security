@@ -3,15 +3,6 @@ trigger:
 - none
 
 parameters:
-- name: targetApp
-  displayName: Target Application(s) to scan
-  type: string
-  default: 'agent'
-  values:
-  - 'admin'
-  - 'agent'
-  - 'both'
-
 - name: scanType
   displayName: Type of ZAP scan
   type: string
@@ -26,11 +17,10 @@ parameters:
   type: string
   default: 'traditional-html'
   values:
-    # Using exact template IDs from ZAP's output for correctness
   - traditional-html
   - traditional-json
   - sarif-json
-  - traditional-pdf # Corrected from 'pdf' to 'traditional-pdf'
+  - traditional-pdf
 
 - name: adminUrl
   displayName: Admin Application URL
@@ -47,10 +37,9 @@ stages:
   displayName: "Run ZAP Scan"
   jobs:
 
-  # Run admin scan only if chosen
+  # Always run admin scan
   - job: AdminScan
     displayName: "ZAP Scan - Admin"
-    condition: or(eq('${{ parameters.targetApp }}','admin'), eq('${{ parameters.targetApp }}','both'))
     pool:
       vmImage: 'ubuntu-latest'
     steps:
@@ -61,10 +50,9 @@ stages:
         scanType: ${{ parameters.scanType }}
         reportTemplate: ${{ parameters.reportTemplate }}
 
-  # Run agent scan only if chosen
+  # Always run agent scan
   - job: AgentScan
     displayName: "ZAP Scan - Agent"
-    condition: or(eq('${{ parameters.targetApp }}','agent'), eq('${{ parameters.targetApp }}','both'))
     pool:
       vmImage: 'ubuntu-latest'
     steps:
