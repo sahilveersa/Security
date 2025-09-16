@@ -1,7 +1,6 @@
 # azure-pipelines.yml
 trigger:
 - none
-
 parameters:
 - name: environment
   displayName: Environment to scan
@@ -11,7 +10,6 @@ parameters:
   - 'dev'
   - 'qa'
   - 'prod'
-
 - name: scanType
   displayName: Type of ZAP scan
   type: string
@@ -20,7 +18,6 @@ parameters:
   - 'baseline'
   - 'full'
   - 'api'
-
 - name: reportTemplate
   displayName: ZAP Report Template
   type: string
@@ -32,12 +29,10 @@ parameters:
   - 'traditional-json'
   - 'sarif-json'
   - 'pdf' 
-
 variables:
   devUrl: 'http://testphp.vulnweb.com'
   qaUrl: 'https://qa-agent.app-np.neovance.com/'
   prodUrl: 'http://my-prod-app.com'
-
 stages:
 - stage: ZAP_Scan_Stage
   displayName: 'Run ZAP Scan'
@@ -45,7 +40,6 @@ stages:
   - job: ZAP_Scan_Job
     pool:
       vmImage: 'ubuntu-latest'
-
     steps:
     - script: |
         echo "Starting ZAP Scan..."
@@ -81,38 +75,63 @@ stages:
         mkdir -p $(Build.ArtifactStagingDirectory)
         cd $(Build.ArtifactStagingDirectory)
         
-        # Create a minimal zap.yaml in the working directory
-        echo "# ZAP Configuration" > zap.yaml
-        chmod 666 zap.yaml
+        # Make sure we have proper permissions
+        sudo chown -R $(id -u):$(id -g) $(pwd)
+        chmod 755 $(pwd)
         
-        # Base docker command without user mapping to avoid permission issues
-        ZAP_CMD="docker run --rm -v $(pwd):/zap/wrk:rw ghcr.io/zaproxy/zaproxy:stable"
+        echo "Current directory: $(pwd)"
+        echo "Directory permissions:"
+        ls -la $(pwd)
         
-        # Choose scan type
+        # Base docker command - run as root and fix permissions after
+        ZAP_CMD="docker run --rm -v $(pwd):/zap/wrk:rw --workdir /zap/wrk"
+        
+        # Add environment variables for better control
+        ZAP_CMD+=" -e ZAP_PORT=8090"
+        ZAP_CMD+=" ghcr.io/zaproxy/zaproxy:stable"
+        
+        # Choose scan type and build command
         if [ "${{ parameters.scanType }}" == "baseline" ]; then
-          ZAP_CMD+=" zap-baseline.py"
+          ZAP_CMD+=" zap-baseline.py -t $TARGET_URL -r $REPORT_FILENAME -d"
         elif [ "${{ parameters.scanType }}" == "full" ]; then
-          ZAP_CMD+=" zap-full-scan.py"
+          ZAP_CMD+=" zap-full-scan.py -t $TARGET_URL -r $REPORT_FILENAME -d"
         elif [ "${{ parameters.scanType }}" == "api" ]; then
-          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs"
+          ZAP_CMD+=" zap-api-scan.py -f openapi -t $TARGET_URL/api-docs -r $REPORT_FILENAME -d"
         fi
         
-        ZAP_CMD+=" -t $TARGET_URL"
-        # Don't use -w flag, let ZAP use its default config location
-        
-        # Handle report type
+        # Add report template configuration (if not modern/default)
         if [ "${{ parameters.reportTemplate }}" == "pdf" ]; then
           ZAP_CMD+=" -z \"-addoninstall report\""
           ZAP_CMD+=" -z \"-reportformat pdf\""
           ZAP_CMD+=" -z \"-reportfile /zap/wrk/$REPORT_FILENAME\""
-        else
-          ZAP_CMD+=" -r $REPORT_FILENAME"
-          if [ "${{ parameters.reportTemplate }}" != "modern" ]; then
-            ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
-          fi
+        elif [ "${{ parameters.reportTemplate }}" != "modern" ]; then
+          ZAP_CMD+=" -z \"-config report.template=${{ parameters.reportTemplate }}\""
         fi
         
         echo "Executing: $ZAP_CMD"
         eval $ZAP_CMD
         
+        # Fix permissions on generated files
+        echo "Fixing permissions on generated files..."
+        sudo chown -R $(id -u):$(id -g) $(pwd)
+        
+        # Verify report was created
+        echo "Files after scan:"
+        ls -la
+        
+        if [ -f "$REPORT_FILENAME" ]; then
+          echo "✅ ZAP scan completed successfully. Report: $REPORT_FILENAME"
+          echo "Report size: $(du -h $REPORT_FILENAME)"
+        else
+          echo "❌ ZAP scan failed or report not generated"
+          echo "Available files:"
+          find . -name "*.html" -o -name "*.json" -o -name "*.pdf"
+          exit 1
+        fi
+        
       displayName: 'Run ZAP Scan with Docker'
+      
+    - publish: '$(Build.ArtifactStagingDirectory)'
+      artifact: 'ZAP_Reports_${{ parameters.environment }}'
+      displayName: 'Publish ZAP Scan Report'
+      condition: always()
