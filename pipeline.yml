@@ -82,9 +82,9 @@ stages:
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
             -t $TARGET_URL \
-            -r /zap/wrk/report.html \
-            -x /zap/wrk/report.xml \
-            -J /zap/wrk/report.json \
+            -r report.html \
+            -x report.xml \
+            -J report.json \
             -d)
             
         elif [ "${{ parameters.scanType }}" == "full" ]; then
