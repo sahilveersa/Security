@@ -26,12 +26,13 @@ parameters:
   type: string
   default: 'modern'
   values:
+    # Note: These are the template IDs used by the ZAP Automation Framework
   - 'modern'
   - 'traditional-html'
   - 'traditional-html-plus'
   - 'traditional-json'
-  - 'sarif-json'
-  - 'pdf'
+  - 'sarif' # The template ID is 'sarif', not 'sarif-json'
+  - 'pdf'   # PDF support added
 
 - name: adminUrl
   displayName: Admin Application URL

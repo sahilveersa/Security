@@ -16,72 +16,101 @@ steps:
     echo "Scan Type: ${{ parameters.scanType }}"
     echo "Report Template: ${{ parameters.reportTemplate }}"
 
-    mkdir -p $(Build.ArtifactStagingDirectory)/zap-reports
-    cd $(Build.ArtifactStagingDirectory)/zap-reports
+    # Create a directory for the reports and the automation file
+    ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
+    mkdir -p $ARTIFACT_DIR
+    cd $ARTIFACT_DIR
+    
+    AUTOMATION_FILE="automation.yaml"
 
-    CONTAINER_ID=""
+    # ========================================================================
+    # Dynamically create the ZAP Automation Framework configuration file
+    # ========================================================================
+    
+    # --- Common Environment Section ---
+    cat <<EOF > $AUTOMATION_FILE
+    env:
+      contexts:
+        - name: '${{ parameters.appName }}'
+          urls:
+            - '${{ parameters.targetUrl }}'
+      parameters:
+        failOnError: true
+        failOnWarning: false
+        progressToStdout: true
+    jobs:
+    EOF
+
+    # --- Scan-Type Specific Jobs ---
     if [ "${{ parameters.scanType }}" == "baseline" ]; then
-      CONTAINER_ID=$(docker run -d --rm \
-        -v $(pwd):/zap/wrk:rw \
-        --user root \
-        ghcr.io/zaproxy/zaproxy:stable \
-        zap-baseline.py \
-        -t "${{ parameters.targetUrl }}" \
-        -r report.html \
-        -J report.json \
-        -d)
+      cat <<EOF >> $AUTOMATION_FILE
+      - type: passiveScan-config
+        parameters:
+          maxAlertsPerRule: 10
+      - type: spider
+        parameters:
+          url: '${{ parameters.targetUrl }}'
+          maxDuration: 5
+          failIfFoundUrlsLessThan: 5
+      - type: passiveScan-wait
+    EOF
     elif [ "${{ parameters.scanType }}" == "full" ]; then
-      CONTAINER_ID=$(docker run -d --rm \
-        -v $(pwd):/zap/wrk:rw \
-        --user root \
-        ghcr.io/zaproxy/zaproxy:stable \
-        zap-full-scan.py \
-        -t "${{ parameters.targetUrl }}" \
-        -r report.html \
-        -J report.json \
-        -d)
+      cat <<EOF >> $AUTOMATION_FILE
+      - type: spider
+        parameters:
+          url: '${{ parameters.targetUrl }}'
+      - type: ajaxSpider
+        parameters:
+          url: '${{ parameters.targetUrl }}'
+          maxDuration: 5
+      - type: passiveScan-wait
+      - type: activeScan
+        parameters:
+          context: '${{ parameters.appName }}'
+    EOF
     elif [ "${{ parameters.scanType }}" == "api" ]; then
-      CONTAINER_ID=$(docker run -d --rm \
-        -v $(pwd):/zap/wrk:rw \
-        --user root \
-        ghcr.io/zaproxy/zaproxy:stable \
-        zap-api-scan.py \
-        -t "${{ parameters.targetUrl }}" \
-        -f openapi \
-        -r report.html \
-        -J report.json \
-        -d)
+      cat <<EOF >> $AUTOMATION_FILE
+      - type: openapi
+        parameters:
+          apiFile: '${{ parameters.targetUrl }}' # Can be a URL or a file path
+      - type: passiveScan-wait
+      - type: activeScan
+        parameters:
+          context: '${{ parameters.appName }}'
+    EOF
     fi
 
-    echo "Waiting for ZAP scan container to finish..."
-    docker logs -f $CONTAINER_ID || true
-    docker wait $CONTAINER_ID || true
+    # --- Common Reporting Job ---
+    # This job is added to all scan types
+    cat <<EOF >> $AUTOMATION_FILE
+      - type: report
+        parameters:
+          template: '${{ parameters.reportTemplate }}'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}'
+          displayReport: false
+    EOF
 
-    # Rename with app identifier
-    if [ -f "report.html" ]; then
-      mv report.html zap_${{ parameters.appName }}_${{ parameters.scanType }}_report.html
-    fi
-    if [ -f "report.json" ]; then
-      mv report.json zap_${{ parameters.appName }}_${{ parameters.scanType }}_report.json
-    fi
+    echo "Generated Automation Plan:"
+    cat $AUTOMATION_FILE
 
-    echo "Reports generated:"
+    # ========================================================================
+    # Run the ZAP Docker container with the automation framework
+    # ========================================================================
+    # The new command runs in the foreground, simplifying the script.
+    # We add '-addoninstall report-generation' to ensure PDF dependencies are present.
+    docker run --rm \
+      -v $(pwd):/zap/wrk/:rw \
+      --user root \
+      ghcr.io/zaproxy/zaproxy:stable \
+      zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
+      
+    echo "ZAP scan finished."
+    echo "Reports generated in $(pwd):"
     ls -la
 
-  displayName: "Run ZAP Scan"
+  displayName: "Run ZAP Scan with Automation Framework"
 
 - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
   artifact: 'ZAP_Reports_${{ parameters.appName }}'
   displayName: 'Publish ZAP Scan Reports'
-
-# - task: PublishTestResults@2
-#  displayName: 'Publish ZAP Test Results'
-#  inputs:
-#    testResultsFormat: 'JUnit'
-#    testResultsFiles: '**/zap_*_${{ parameters.appName }}_report.xml'
-#    searchFolder: '$(Build.ArtifactStagingDirectory)/zap-reports'
-#    mergeTestResults: false
-#    failTaskOnFailedTests: false
-#    testRunTitle: 'ZAP Security Scan Results - ${{ parameters.appName }}'
-#  condition: always()
-#  continueOnError: true
