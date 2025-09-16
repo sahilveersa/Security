@@ -74,14 +74,14 @@ steps:
   artifact: 'ZAP_Reports_${{ parameters.appName }}'
   displayName: 'Publish ZAP Scan Reports'
 
-- task: PublishTestResults@2
-  displayName: 'Publish ZAP Test Results'
-  inputs:
-    testResultsFormat: 'JUnit'
-    testResultsFiles: '**/zap_*_${{ parameters.appName }}_report.xml'
-    searchFolder: '$(Build.ArtifactStagingDirectory)/zap-reports'
-    mergeTestResults: false
-    failTaskOnFailedTests: false
-    testRunTitle: 'ZAP Security Scan Results - ${{ parameters.appName }}'
-  condition: always()
-  continueOnError: true
+# - task: PublishTestResults@2
+#  displayName: 'Publish ZAP Test Results'
+#  inputs:
+#    testResultsFormat: 'JUnit'
+#    testResultsFiles: '**/zap_*_${{ parameters.appName }}_report.xml'
+#    searchFolder: '$(Build.ArtifactStagingDirectory)/zap-reports'
+#    mergeTestResults: false
+#    failTaskOnFailedTests: false
+#    testRunTitle: 'ZAP Security Scan Results - ${{ parameters.appName }}'
+#  condition: always()
+#  continueOnError: true

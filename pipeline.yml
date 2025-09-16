@@ -36,7 +36,7 @@ parameters:
 - name: adminUrl
   displayName: Admin Application URL
   type: string
-  default: 'https://admin.app-np.neovance.com/'
+  default: 'https://qa.app-np.neovance.com/'
 
 - name: agentUrl
   displayName: Agent Application URL
