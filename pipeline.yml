@@ -24,7 +24,7 @@ parameters:
 - name: reportTemplate
   displayName: ZAP Report Template
   type: string
-  default: 'modern'
+  default: 'tradtional-html'
   values:
     # Using exact template IDs from ZAP's output for correctness
 #  - modern
