@@ -10,7 +10,6 @@ parameters:
   values:
   - 'baseline'
   - 'full'
-  - 'api'
 
 - name: reportTemplate
   displayName: ZAP Report Template

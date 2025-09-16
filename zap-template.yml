@@ -66,16 +66,6 @@ steps:
         parameters:
           context: '${{ parameters.appName }}'
     EOF
-    elif [ "${{ parameters.scanType }}" == "api" ]; then
-      cat <<EOF >> $AUTOMATION_FILE
-      - type: openapi
-        parameters:
-          apiFile: '${{ parameters.targetUrl }}'
-      - type: passiveScan-wait
-      - type: activeScan
-        parameters:
-          context: '${{ parameters.appName }}'
-    EOF
     fi
 
     # --- Report Jobs ---
