@@ -45,6 +45,7 @@ stages:
         echo "Starting ZAP Scan..."
         echo "Environment: ${{ parameters.environment }}"
         echo "Scan Type: ${{ parameters.scanType }}"
+        echo "Report Template: ${{ parameters.reportTemplate }}"
         
         # Pick target URL
         if [ "${{ parameters.environment }}" == "dev" ]; then
@@ -58,35 +59,52 @@ stages:
         fi
         
         echo "Target URL: $TARGET_URL"
+        
+        # Work dir inside pipeline  
+        mkdir -p $(Build.ArtifactStagingDirectory)
         cd $(Build.ArtifactStagingDirectory)
         
-        # Create a temporary container and copy files out afterward
-        echo "Creating and running ZAP container..."
+        # Create a writable directory with full permissions
+        mkdir -p zap-reports
+        chmod 777 zap-reports
         
-        CONTAINER_NAME="zap-scan-$(date +%s)"
+        echo "Working directory: $(pwd)"
+        echo "ZAP reports directory: $(pwd)/zap-reports"
+        
+        # Run ZAP scan with output redirected and no config file generation
+        CONTAINER_ID=""
         
         if [ "${{ parameters.scanType }}" == "baseline" ]; then
-          docker run --name $CONTAINER_NAME \
+          echo "Running ZAP Baseline Scan..."
+          CONTAINER_ID=$(docker run -d --rm \
+            -v $(pwd)/zap-reports:/zap/wrk:rw \
+            --user root \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py \
             -t $TARGET_URL \
             -r /zap/wrk/report.html \
             -x /zap/wrk/report.xml \
             -J /zap/wrk/report.json \
-            -d || echo "ZAP scan completed with findings"
+            -d)
             
         elif [ "${{ parameters.scanType }}" == "full" ]; then
-          docker run --name $CONTAINER_NAME \
+          echo "Running ZAP Full Scan..."
+          CONTAINER_ID=$(docker run -d --rm \
+            -v $(pwd)/zap-reports:/zap/wrk:rw \
+            --user root \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-full-scan.py \
             -t $TARGET_URL \
             -r /zap/wrk/report.html \
             -x /zap/wrk/report.xml \
             -J /zap/wrk/report.json \
-            -d || echo "ZAP scan completed with findings"
+            -d)
             
         elif [ "${{ parameters.scanType }}" == "api" ]; then
-          docker run --name $CONTAINER_NAME \
+          echo "Running ZAP API Scan..."
+          CONTAINER_ID=$(docker run -d --rm \
+            -v $(pwd)/zap-reports:/zap/wrk:rw \
+            --user root \
             ghcr.io/zaproxy/zaproxy:stable \
             zap-api-scan.py \
             -t $TARGET_URL \
@@ -94,36 +112,90 @@ stages:
             -r /zap/wrk/report.html \
             -x /zap/wrk/report.xml \
             -J /zap/wrk/report.json \
-            -d || echo "ZAP scan completed with findings"
+            -d)
         fi
         
-        echo "Extracting reports from container..."
+        echo "Container ID: $CONTAINER_ID"
+        echo "Waiting for ZAP scan to complete..."
         
-        # Copy files out of the container
-        docker cp $CONTAINER_NAME:/zap/wrk/report.html ./zap_${{ parameters.scanType }}_report.html 2>/dev/null || echo "HTML report not found"
-        docker cp $CONTAINER_NAME:/zap/wrk/report.xml ./zap_${{ parameters.scanType }}_report.xml 2>/dev/null || echo "XML report not found"
-        docker cp $CONTAINER_NAME:/zap/wrk/report.json ./zap_${{ parameters.scanType }}_report.json 2>/dev/null || echo "JSON report not found"
+        # Wait for container to finish and get logs
+        docker logs -f $CONTAINER_ID || true
+        docker wait $CONTAINER_ID || true
         
-        # Clean up container
-        docker rm $CONTAINER_NAME 2>/dev/null || true
+        echo "ZAP scan completed. Checking generated files..."
+        ls -la zap-reports/
         
-        # Check what we got
-        echo "Generated files:"
-        ls -la *.html *.xml *.json 2>/dev/null || echo "No report files found"
+        # Fix permissions on generated files
+        sudo chown -R $(whoami):$(whoami) zap-reports/ || true
+        chmod -R 644 zap-reports/* || true
         
-        # Verify at least one report exists
-        if ls zap_*_report.* 1> /dev/null 2>&1; then
-          echo "✅ ZAP scan reports generated successfully!"
-          for file in zap_*_report.*; do
-            if [ -f "$file" ]; then
-              echo "📄 $file ($(du -h "$file" | cut -f1))"
-            fi
-          done
+        # Move files to staging directory and rename appropriately
+        REPORT_CREATED=false
+        
+        if [ -f "zap-reports/report.html" ]; then
+          cp "zap-reports/report.html" "zap_${{ parameters.scanType }}_report.html"
+          echo "✅ HTML report created: zap_${{ parameters.scanType }}_report.html"
+          echo "Report size: $(du -h zap_${{ parameters.scanType }}_report.html)"
+          REPORT_CREATED=true
+        fi
+        
+        if [ -f "zap-reports/report.xml" ]; then
+          cp "zap-reports/report.xml" "zap_${{ parameters.scanType }}_report.xml"
+          echo "✅ XML report created: zap_${{ parameters.scanType }}_report.xml"
+          echo "Report size: $(du -h zap_${{ parameters.scanType }}_report.xml)"
+          REPORT_CREATED=true
+        fi
+        
+        if [ -f "zap-reports/report.json" ]; then
+          cp "zap-reports/report.json" "zap_${{ parameters.scanType }}_report.json"
+          echo "✅ JSON report created: zap_${{ parameters.scanType }}_report.json"
+          echo "Report size: $(du -h zap_${{ parameters.scanType }}_report.json)"
+          REPORT_CREATED=true
+        fi
+        
+        # Copy any other files that were generated
+        if [ "$(ls -A zap-reports/)" ]; then
+          echo "Additional files found in zap-reports:"
+          ls -la zap-reports/
+          cp zap-reports/* . 2>/dev/null || true
+        fi
+        
+        # Final file listing
+        echo "Final files in artifact directory:"
+        ls -la
+        
+        if [ "$REPORT_CREATED" = true ]; then
+          echo "🎉 ZAP scan completed successfully!"
+          # Determine which report to highlight based on template preference
+          case "${{ parameters.reportTemplate }}" in
+            traditional-json|sarif-json)
+              echo "Primary report: zap_${{ parameters.scanType }}_report.json"
+              ;;
+            *)
+              echo "Primary report: zap_${{ parameters.scanType }}_report.html"
+              ;;
+          esac
         else
           echo "❌ No reports were generated"
-          echo "Container logs:"
-          docker logs $CONTAINER_NAME 2>/dev/null || echo "No logs available"
+          echo "Check if the target URL is accessible: $TARGET_URL"
           exit 1
         fi
         
-      displayName: 'Run ZAP Scan and Extract Reports'
+      displayName: 'Run ZAP Scan with Docker'
+      
+    - publish: '$(Build.ArtifactStagingDirectory)'
+      artifact: 'ZAP_Reports_${{ parameters.environment }}'
+      displayName: 'Publish ZAP Scan Reports'
+      condition: always()
+      
+    - task: PublishTestResults@2
+      displayName: 'Publish ZAP Test Results'
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/zap_*_report.xml'
+        searchFolder: '$(Build.ArtifactStagingDirectory)'
+        mergeTestResults: false
+        failTaskOnFailedTests: false
+        testRunTitle: 'ZAP Security Scan Results - ${{ parameters.environment }}'
+      condition: and(always(), contains(variables['Agent.JobStatus'], 'Succeeded'))
+      continueOnError: true
