@@ -16,18 +16,15 @@ steps:
     echo "Scan Type: ${{ parameters.scanType }}"
     echo "Report Template: ${{ parameters.reportTemplate }}"
 
-    # Create a directory for the reports and the automation file
     ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
     mkdir -p $ARTIFACT_DIR
     cd $ARTIFACT_DIR
-    
+
     AUTOMATION_FILE="automation.yaml"
 
     # ========================================================================
     # Dynamically create the ZAP Automation Framework configuration file
     # ========================================================================
-    
-    # --- Common Environment Section ---
     cat <<EOF > $AUTOMATION_FILE
     env:
       contexts:
@@ -51,7 +48,6 @@ steps:
         parameters:
           url: '${{ parameters.targetUrl }}'
           maxDuration: 5
-          # FIXED: 'failIfFoundUrlsLessThan' is a boolean, the count is a separate param
           failIfFoundUrlsLessThan: true
           foundUrlsLessThan: 5
       - type: passiveScan-wait
@@ -74,7 +70,7 @@ steps:
       cat <<EOF >> $AUTOMATION_FILE
       - type: openapi
         parameters:
-          apiFile: '${{ parameters.targetUrl }}' # Can be a URL or a file path
+          apiFile: '${{ parameters.targetUrl }}'
       - type: passiveScan-wait
       - type: activeScan
         parameters:
@@ -82,8 +78,8 @@ steps:
     EOF
     fi
 
-    # --- Common Reporting Job ---
-    # This job is added to all scan types
+    # --- Report Jobs ---
+    # User-selected report
     cat <<EOF >> $AUTOMATION_FILE
       - type: report
         parameters:
@@ -93,22 +89,28 @@ steps:
           displayReport: false
     EOF
 
+    # Always export traditional-json as well
+    cat <<EOF >> $AUTOMATION_FILE
+      - type: report
+        parameters:
+          template: 'traditional-json'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}.json'
+          displayReport: false
+    EOF
+
     echo "Generated Automation Plan:"
     cat $AUTOMATION_FILE
 
-    # ========================================================================
-    # Run the ZAP Docker container with the automation framework
-    # ========================================================================
     docker run --rm \
       -v $(pwd):/zap/wrk/:rw \
       --user root \
       ghcr.io/zaproxy/zaproxy:stable \
       zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
-      
+
     echo "ZAP scan finished."
     echo "Reports generated in $(pwd):"
     ls -la
-
   displayName: "Run ZAP Scan with Automation Framework"
 
 - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
