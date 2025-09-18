@@ -34,8 +34,8 @@ stages:
 - stage: Auth_Login
   displayName: "Authenticate via Playwright"
   jobs:
-  - job: PlaywrightLogin
-    displayName: "Run Playwright login and save session"
+  - job: PlaywrightLoginAdmin
+    displayName: "Run Playwright login and save session (Admin)"
     pool:
       vmImage: 'ubuntu-latest'
     steps:
@@ -46,17 +46,39 @@ stages:
         npm install -D @playwright/test
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
-        # Run login script
         node playwright-login.js \
           --url "${{ parameters.adminUrl }}" \
           --email "$(QA_ADMIN_EMAIL)" \
           --password "$(QA_ADMIN_PASSWORD)" \
-          --mfa "$(QA_ADMIN_AUTHENTICATOR_CODE)" \
-          --output "$(Build.ArtifactStagingDirectory)/auth/session.json"
-      displayName: "Run Playwright login"
-    - publish: '$(Build.ArtifactStagingDirectory)/auth'
-      artifact: 'PlaywrightSession'
-      displayName: 'Publish Playwright session.json'
+          --mfaSecret "$(QA_ADMIN_MFA_SECRET)" \
+          --output "$(Build.ArtifactStagingDirectory)/auth/admin-session.json"
+      displayName: "Run Playwright login (Admin)"
+    - publish: '$(Build.ArtifactStagingDirectory)/auth/admin-session.json'
+      artifact: 'PlaywrightSessionAdmin'
+      displayName: 'Publish Admin session.json'
+
+  - job: PlaywrightLoginAgent
+    displayName: "Run Playwright login and save session (Agent)"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: UseNode@1
+      inputs:
+        version: '18.x'
+    - script: |
+        npm install -D @playwright/test
+        npx playwright install --with-deps
+        mkdir -p $(Build.ArtifactStagingDirectory)/auth
+        node playwright-login.js \
+          --url "${{ parameters.agentUrl }}" \
+          --email "$(QA_AGENT_EMAIL)" \
+          --password "$(QA_AGENT_PASSWORD)" \
+          --mfaSecret "$(QA_AGENT_MFA_SECRET)" \
+          --output "$(Build.ArtifactStagingDirectory)/auth/agent-session.json"
+      displayName: "Run Playwright login (Agent)"
+    - publish: '$(Build.ArtifactStagingDirectory)/auth/agent-session.json'
+      artifact: 'PlaywrightSessionAgent'
+      displayName: 'Publish Agent session.json'
 
 - stage: ZAP_Scan_Stage
   displayName: "Run ZAP Scan"
@@ -69,7 +91,7 @@ stages:
       vmImage: 'ubuntu-latest'
     steps:
     - download: current
-      artifact: PlaywrightSession
+      artifact: PlaywrightSessionAdmin
     - template: zap-template.yml
       parameters:
         targetUrl: ${{ parameters.adminUrl }}
@@ -83,7 +105,7 @@ stages:
       vmImage: 'ubuntu-latest'
     steps:
     - download: current
-      artifact: PlaywrightSession
+      artifact: PlaywrightSessionAgent
     - template: zap-template.yml
       parameters:
         targetUrl: ${{ parameters.agentUrl }}
