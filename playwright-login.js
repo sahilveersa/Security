@@ -22,7 +22,7 @@ if (!url || !email || !password || !mfaSecret) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: false }); // change to false for debugging
+  const browser = await chromium.launch({ headless: true }); // change to false for debugging
   const context = await browser.newContext();
   const page = await context.newPage();
 
