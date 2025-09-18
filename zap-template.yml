@@ -97,7 +97,7 @@ steps:
       -v $(pwd):/zap/wrk/:rw \
       --user root \
       ghcr.io/zaproxy/zaproxy:stable \
-      zap.sh -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
+      zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
 
     echo "ZAP scan finished."
     ls -la
