@@ -91,7 +91,11 @@ steps:
     cat $AUTOMATION_FILE
 
     # Copy Playwright session.json into container workspace
-    cp $(Pipeline.Workspace)/PlaywrightSession/session.json .
+    if [ "${{ parameters.appName }}" == "admin" ]; then
+      cp $(Pipeline.Workspace)/PlaywrightSessionAdmin/admin-session.json session.json
+    else
+      cp $(Pipeline.Workspace)/PlaywrightSessionAgent/agent-session.json session.json
+    fi
 
     docker run --rm \
       -v $(pwd):/zap/wrk/:rw \
