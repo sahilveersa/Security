@@ -58,12 +58,6 @@ steps:
           url: '${{ parameters.targetUrl }}'
           context: '${{ parameters.appName }}'
           user: 'ci-user'
-      - type: ajaxSpider
-        parameters:
-          url: '${{ parameters.targetUrl }}'
-          context: '${{ parameters.appName }}'
-          user: 'ci-user'
-          maxDuration: 5
       - type: passiveScan-wait
       - type: activeScan
         parameters:
