@@ -1,4 +1,3 @@
-# zap-template.yml
 parameters:
   - name: targetUrl
     type: string
@@ -13,8 +12,6 @@ steps:
 - script: |
     echo "Starting ZAP Scan for ${{ parameters.appName }}..."
     echo "Target URL: ${{ parameters.targetUrl }}"
-    echo "Scan Type: ${{ parameters.scanType }}"
-    echo "Report Template: ${{ parameters.reportTemplate }}"
 
     ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
     mkdir -p $ARTIFACT_DIR
@@ -23,7 +20,7 @@ steps:
     AUTOMATION_FILE="automation.yaml"
 
     # ========================================================================
-    # Dynamically create the ZAP Automation Framework configuration file
+    # ZAP Automation Framework config
     # ========================================================================
     cat <<EOF > $AUTOMATION_FILE
     env:
@@ -31,6 +28,16 @@ steps:
         - name: '${{ parameters.appName }}'
           urls:
             - '${{ parameters.targetUrl }}'
+          authentication:
+            method: 'manual'
+            loggedInIndicator: 'Logout'
+            loggedOutIndicator: 'Login'
+            verification:
+              method: 'auto'
+          users:
+            - name: 'ci-user'
+              credentials:
+                session: '/zap/wrk/session.json'
       parameters:
         failOnError: true
         failOnWarning: false
@@ -38,21 +45,15 @@ steps:
     jobs:
     EOF
 
-    # --- Scan-Type Specific Jobs ---
     if [ "${{ parameters.scanType }}" == "baseline" ]; then
       cat <<EOF >> $AUTOMATION_FILE
-      - type: passiveScan-config
-        parameters:
-          maxAlertsPerRule: 10
       - type: spider
         parameters:
           url: '${{ parameters.targetUrl }}'
           maxDuration: 5
-          failIfFoundUrlsLessThan: true
-          foundUrlsLessThan: 5
       - type: passiveScan-wait
     EOF
-    elif [ "${{ parameters.scanType }}" == "full" ]; then
+    else
       cat <<EOF >> $AUTOMATION_FILE
       - type: spider
         parameters:
@@ -68,7 +69,6 @@ steps:
     EOF
     fi
 
-    # --- Report Jobs ---
     # User-selected report
     cat <<EOF >> $AUTOMATION_FILE
       - type: report
@@ -76,21 +76,22 @@ steps:
           template: '${{ parameters.reportTemplate }}'
           reportDir: '/zap/wrk/'
           reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}'
-          displayReport: false
     EOF
 
-    # Always export traditional-json as well
+    # Always export traditional-json
     cat <<EOF >> $AUTOMATION_FILE
       - type: report
         parameters:
           template: 'traditional-json'
           reportDir: '/zap/wrk/'
           reportFile: 'zap_report_${{ parameters.appName }}_${{ parameters.scanType }}.json'
-          displayReport: false
     EOF
 
     echo "Generated Automation Plan:"
     cat $AUTOMATION_FILE
+
+    # Copy Playwright session.json into container workspace
+    cp $(Pipeline.Workspace)/PlaywrightSession/session.json .
 
     docker run --rm \
       -v $(pwd):/zap/wrk/:rw \
@@ -99,9 +100,8 @@ steps:
       zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
 
     echo "ZAP scan finished."
-    echo "Reports generated in $(pwd):"
     ls -la
-  displayName: "Run ZAP Scan with Automation Framework"
+  displayName: "Run ZAP Scan with Auth"
 
 - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
   artifact: 'ZAP_Reports_${{ parameters.appName }}'

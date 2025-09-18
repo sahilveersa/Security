@@ -1,4 +1,3 @@
-# azure-pipelines.yml
 trigger:
 - none
 
@@ -32,16 +31,45 @@ parameters:
   default: 'https://qa-agent.app-np.neovance.com/'
 
 stages:
+- stage: Auth_Login
+  displayName: "Authenticate via Playwright"
+  jobs:
+  - job: PlaywrightLogin
+    displayName: "Run Playwright login and save session"
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: UseNode@1
+      inputs:
+        version: '18.x'
+    - script: |
+        npm install -D @playwright/test
+        npx playwright install --with-deps
+        mkdir -p $(Build.ArtifactStagingDirectory)/auth
+        # Run login script
+        node playwright-login.js \
+          --url "${{ parameters.adminUrl }}" \
+          --email "$(QA_ADMIN_EMAIL)" \
+          --password "$(QA_ADMIN_PASSWORD)" \
+          --mfa "$(QA_ADMIN_AUTHENTICATOR_CODE)" \
+          --output "$(Build.ArtifactStagingDirectory)/auth/session.json"
+      displayName: "Run Playwright login"
+    - publish: '$(Build.ArtifactStagingDirectory)/auth'
+      artifact: 'PlaywrightSession'
+      displayName: 'Publish Playwright session.json'
+
 - stage: ZAP_Scan_Stage
   displayName: "Run ZAP Scan"
+  dependsOn: Auth_Login
   jobs:
 
-  # Always run admin scan
   - job: AdminScan
     displayName: "ZAP Scan - Admin"
     pool:
       vmImage: 'ubuntu-latest'
     steps:
+    - download: current
+      artifact: PlaywrightSession
     - template: zap-template.yml
       parameters:
         targetUrl: ${{ parameters.adminUrl }}
@@ -49,12 +77,13 @@ stages:
         scanType: ${{ parameters.scanType }}
         reportTemplate: ${{ parameters.reportTemplate }}
 
-  # Always run agent scan
   - job: AgentScan
     displayName: "ZAP Scan - Agent"
     pool:
       vmImage: 'ubuntu-latest'
     steps:
+    - download: current
+      artifact: PlaywrightSession
     - template: zap-template.yml
       parameters:
         targetUrl: ${{ parameters.agentUrl }}
