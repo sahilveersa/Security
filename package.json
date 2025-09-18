@@ -1,6 +1,7 @@
 {
   "name": "zap-auth-login",
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "login": "node playwright-login.js"
   },
