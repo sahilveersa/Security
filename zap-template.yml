@@ -29,11 +29,7 @@ steps:
           urls:
             - '${{ parameters.targetUrl }}'
           authentication:
-            method: 'manual'
-            loggedInIndicator: 'Logout'
-            loggedOutIndicator: 'Login'
-            verification:
-              method: 'auto'
+            method: manual
           users:
             - name: 'ci-user'
               credentials:
@@ -101,7 +97,7 @@ steps:
       -v $(pwd):/zap/wrk/:rw \
       --user root \
       ghcr.io/zaproxy/zaproxy:stable \
-      zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
+      zap.sh -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
 
     echo "ZAP scan finished."
     ls -la
