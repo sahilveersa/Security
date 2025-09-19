@@ -121,45 +121,46 @@ stages:
         cd $ARTIFACT_DIR
         AUTOMATION_FILE="automation.yaml"
 
-        echo "env:" > $AUTOMATION_FILE
-        echo "  contexts:" >> $AUTOMATION_FILE
-        echo "    - name: 'admin'" >> $AUTOMATION_FILE
-        echo "      urls:" >> $AUTOMATION_FILE
-        for url in ${{ parameters.adminUrls }}; do
-          echo "        - '$url'" >> $AUTOMATION_FILE
-        done
-        cat <<EOF >> $AUTOMATION_FILE
-      authentication:
-        method: manual
-      users:
-        - name: 'ci-user'
-          credentials:
-            session: '/zap/wrk/session.json'
-    parameters:
-      failOnError: true
-      failOnWarning: false
-      progressToStdout: true
-    jobs:
-      - type: spider
-        parameters:
-          context: 'admin'
-          user: 'ci-user'
-      - type: passiveScan-wait
-      - type: activeScan
-        parameters:
-          context: 'admin'
-          user: 'ci-user'
-      - type: report
-        parameters:
-          template: '${{ parameters.reportTemplate }}'
-          reportDir: '/zap/wrk/'
-          reportFile: 'zap_report_admin_${{ parameters.scanType }}'
-      - type: report
-        parameters:
-          template: 'traditional-json'
-          reportDir: '/zap/wrk/'
-          reportFile: 'zap_report_admin_${{ parameters.scanType }}.json'
-EOF
+        cat <<'EOF' > $AUTOMATION_FILE
+        env:
+          contexts:
+            - name: 'admin'
+              urls:
+        ${{ each url in parameters.adminUrls }}:
+                - '${{ url }}'
+        ${{ end }}
+              authentication:
+                method: manual
+              users:
+                - name: 'ci-user'
+                  credentials:
+                    session: '/zap/wrk/session.json'
+          parameters:
+            failOnError: true
+            failOnWarning: false
+            progressToStdout: true
+          jobs:
+            - type: spider
+              parameters:
+                context: 'admin'
+                user: 'ci-user'
+            - type: passiveScan-wait
+            - type: activeScan
+              parameters:
+                context: 'admin'
+                user: 'ci-user'
+            - type: report
+              parameters:
+                template: '${{ parameters.reportTemplate }}'
+                reportDir: '/zap/wrk/'
+                reportFile: 'zap_report_admin_${{ parameters.scanType }}'
+            - type: report
+              parameters:
+                template: 'traditional-json'
+                reportDir: '/zap/wrk/'
+                reportFile: 'zap_report_admin_${{ parameters.scanType }}.json'
+        EOF
+
 
         cp $(Pipeline.Workspace)/PlaywrightSessionAdmin/admin-session.json session.json
 
@@ -190,45 +191,45 @@ EOF
         cd $ARTIFACT_DIR
         AUTOMATION_FILE="automation.yaml"
 
-        echo "env:" > $AUTOMATION_FILE
-        echo "  contexts:" >> $AUTOMATION_FILE
-        echo "    - name: 'agent'" >> $AUTOMATION_FILE
-        echo "      urls:" >> $AUTOMATION_FILE
-        for url in ${{ parameters.agentUrls }}; do
-          echo "        - '$url'" >> $AUTOMATION_FILE
-        done
-        cat <<EOF >> $AUTOMATION_FILE
-      authentication:
-        method: manual
-      users:
-        - name: 'ci-user'
-          credentials:
-            session: '/zap/wrk/session.json'
-    parameters:
-      failOnError: true
-      failOnWarning: false
-      progressToStdout: true
-    jobs:
-      - type: spider
-        parameters:
-          context: 'agent'
-          user: 'ci-user'
-      - type: passiveScan-wait
-      - type: activeScan
-        parameters:
-          context: 'agent'
-          user: 'ci-user'
-      - type: report
-        parameters:
-          template: '${{ parameters.reportTemplate }}'
-          reportDir: '/zap/wrk/'
-          reportFile: 'zap_report_agent_${{ parameters.scanType }}'
-      - type: report
-        parameters:
-          template: 'traditional-json'
-          reportDir: '/zap/wrk/'
-          reportFile: 'zap_report_agent_${{ parameters.scanType }}.json'
-EOF
+        cat <<'EOF' > $AUTOMATION_FILE
+        env:
+          contexts:
+            - name: 'agent'
+              urls:
+        ${{ each url in parameters.agentUrls }}:
+                - '${{ url }}'
+        ${{ end }}
+              authentication:
+                method: manual
+              users:
+                - name: 'ci-user'
+                  credentials:
+                    session: '/zap/wrk/session.json'
+          parameters:
+            failOnError: true
+            failOnWarning: false
+            progressToStdout: true
+          jobs:
+            - type: spider
+              parameters:
+                context: 'agent'
+                user: 'ci-user'
+            - type: passiveScan-wait
+            - type: activeScan
+              parameters:
+                context: 'agent'
+                user: 'ci-user'
+            - type: report
+              parameters:
+                template: '${{ parameters.reportTemplate }}'
+                reportDir: '/zap/wrk/'
+                reportFile: 'zap_report_agent_${{ parameters.scanType }}'
+            - type: report
+              parameters:
+                template: 'traditional-json'
+                reportDir: '/zap/wrk/'
+                reportFile: 'zap_report_agent_${{ parameters.scanType }}.json'
+        EOF
 
         cp $(Pipeline.Workspace)/PlaywrightSessionAgent/agent-session.json session.json
 
