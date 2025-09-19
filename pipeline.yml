@@ -20,15 +20,38 @@ parameters:
   - sarif-json
   - traditional-pdf
 
-- name: adminUrl
-  displayName: Admin Application URL
-  type: string
-  default: 'https://qa.app-np.neovance.com/'
+- name: adminUrls
+  displayName: Admin URLs to scan
+  type: object
+  default:
+    - 'https://qa.app-np.neovance.com/clients'
+    - 'https://qa.app-np.neovance.com/user-management/permission-sets'
+    - 'https://qa.app-np.neovance.com/entity-manager'
+    - 'https://qa.app-np.neovance.com/hcp-portal'
+    - 'https://qa.app-np.neovance.com/case-mapping'
+    - 'https://qa.app-np.neovance.com/correspondence/placeholders'
+    - 'https://qa.app-np.neovance.com/correspondence/static-documents'
+    - 'https://qa.app-np.neovance.com/correspondence/document-management'
+    - 'https://qa.app-np.neovance.com/correspondence/template-management'
+    - 'https://qa.app-np.neovance.com/correspondence/send-manual-communication'
+    - 'https://qa.app-np.neovance.com/correspondence/correspondence-logs'
+    - 'https://qa.app-np.neovance.com/sla-management'
+    - 'https://qa.app-np.neovance.com/consent-configuration'
+    - 'https://qa.app-np.neovance.com/profile-details'
 
-- name: agentUrl
-  displayName: Agent Application URL
-  type: string
-  default: 'https://qa-agent.app-np.neovance.com/'
+- name: agentUrls
+  displayName: Agent URLs to scan
+  type: object
+  default:
+    - 'https://qa-agent.app-np.neovance.com/dashboard'
+    - 'https://qa-agent.app-np.neovance.com/entities/2144'
+    - 'https://qa-agent.app-np.neovance.com/my-cases/32/1395/36'
+    - 'https://qa-agent.app-np.neovance.com/my-tasks/1127/1318/37'
+    - 'https://qa-agent.app-np.neovance.com/manage-queue/dynamic-queue/32/1394/207'
+    - 'https://qa-agent.app-np.neovance.com/manage-queue/dynamic-queue/32/1394/2'
+    - 'https://qa-agent.app-np.neovance.com/correspondence/correspondence-logs/outbound/3607'
+    - 'https://qa-agent.app-np.neovance.com/interaction'
+    - 'https://qa-agent.app-np.neovance.com/permission-assignment'
 
 stages:
 - stage: Auth_Login
@@ -47,7 +70,7 @@ stages:
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
-          --url "${{ parameters.adminUrl }}" \
+          --url "https://qa.app-np.neovance.com/" \
           --email "$(QA_ADMIN_EMAIL)" \
           --password "$(QA_ADMIN_PASSWORD)" \
           --mfaSecret "$(QA_ADMIN_MFA_SECRET)" \
@@ -70,7 +93,7 @@ stages:
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
-          --url "${{ parameters.agentUrl }}" \
+          --url "https://qa-agent.app-np.neovance.com/" \
           --email "$(QA_AGENT_EMAIL)" \
           --password "$(QA_AGENT_PASSWORD)" \
           --mfaSecret "$(QA_AGENT_MFA_SECRET)" \
@@ -84,7 +107,6 @@ stages:
   displayName: "Run ZAP Scan"
   dependsOn: Auth_Login
   jobs:
-
   - job: AdminScan
     displayName: "ZAP Scan - Admin"
     pool:
@@ -92,12 +114,68 @@ stages:
     steps:
     - download: current
       artifact: PlaywrightSessionAdmin
-    - template: zap-template.yml
-      parameters:
-        targetUrl: ${{ parameters.adminUrl }}
-        appName: 'admin'
-        scanType: ${{ parameters.scanType }}
-        reportTemplate: ${{ parameters.reportTemplate }}
+    - script: |
+        echo "Starting ZAP Scan for admin..."
+        ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
+        mkdir -p $ARTIFACT_DIR
+        cd $ARTIFACT_DIR
+        AUTOMATION_FILE="automation.yaml"
+
+        # Build YAML list of URLs
+        echo "env:" > $AUTOMATION_FILE
+        echo "  contexts:" >> $AUTOMATION_FILE
+        echo "    - name: 'admin'" >> $AUTOMATION_FILE
+        echo "      urls:" >> $AUTOMATION_FILE
+        for url in ${{ parameters.adminUrls }}; do
+          echo "        - '$url'" >> $AUTOMATION_FILE
+        done
+        cat <<EOF >> $AUTOMATION_FILE
+      authentication:
+        method: manual
+      users:
+        - name: 'ci-user'
+          credentials:
+            session: '/zap/wrk/session.json'
+    parameters:
+      failOnError: true
+      failOnWarning: false
+      progressToStdout: true
+    jobs:
+      - type: spider
+        parameters:
+          context: 'admin'
+          user: 'ci-user'
+      - type: passiveScan-wait
+      - type: activeScan
+        parameters:
+          context: 'admin'
+          user: 'ci-user'
+      - type: report
+        parameters:
+          template: '${{ parameters.reportTemplate }}'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_admin_${{ parameters.scanType }}'
+      - type: report
+        parameters:
+          template: 'traditional-json'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_admin_${{ parameters.scanType }}.json'
+EOF
+
+        cp $(Pipeline.Workspace)/PlaywrightSessionAdmin/admin-session.json session.json
+
+        docker run --rm \
+          -v $(pwd):/zap/wrk/:rw \
+          --user root \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
+
+        echo "ZAP scan finished."
+        ls -la
+      displayName: "Run ZAP Scan with Auth (Admin)"
+    - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
+      artifact: 'ZAP_Reports_admin'
+      displayName: 'Publish ZAP Scan Reports (Admin)'
 
   - job: AgentScan
     displayName: "ZAP Scan - Agent"
@@ -106,9 +184,64 @@ stages:
     steps:
     - download: current
       artifact: PlaywrightSessionAgent
-    - template: zap-template.yml
-      parameters:
-        targetUrl: ${{ parameters.agentUrl }}
-        appName: 'agent'
-        scanType: ${{ parameters.scanType }}
-        reportTemplate: ${{ parameters.reportTemplate }}
+    - script: |
+        echo "Starting ZAP Scan for agent..."
+        ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
+        mkdir -p $ARTIFACT_DIR
+        cd $ARTIFACT_DIR
+        AUTOMATION_FILE="automation.yaml"
+
+        echo "env:" > $AUTOMATION_FILE
+        echo "  contexts:" >> $AUTOMATION_FILE
+        echo "    - name: 'agent'" >> $AUTOMATION_FILE
+        echo "      urls:" >> $AUTOMATION_FILE
+        for url in ${{ parameters.agentUrls }}; do
+          echo "        - '$url'" >> $AUTOMATION_FILE
+        done
+        cat <<EOF >> $AUTOMATION_FILE
+      authentication:
+        method: manual
+      users:
+        - name: 'ci-user'
+          credentials:
+            session: '/zap/wrk/session.json'
+    parameters:
+      failOnError: true
+      failOnWarning: false
+      progressToStdout: true
+    jobs:
+      - type: spider
+        parameters:
+          context: 'agent'
+          user: 'ci-user'
+      - type: passiveScan-wait
+      - type: activeScan
+        parameters:
+          context: 'agent'
+          user: 'ci-user'
+      - type: report
+        parameters:
+          template: '${{ parameters.reportTemplate }}'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_agent_${{ parameters.scanType }}'
+      - type: report
+        parameters:
+          template: 'traditional-json'
+          reportDir: '/zap/wrk/'
+          reportFile: 'zap_report_agent_${{ parameters.scanType }}.json'
+EOF
+
+        cp $(Pipeline.Workspace)/PlaywrightSessionAgent/agent-session.json session.json
+
+        docker run --rm \
+          -v $(pwd):/zap/wrk/:rw \
+          --user root \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap.sh -cmd -addoninstall report-generation -autorun /zap/wrk/$AUTOMATION_FILE
+
+        echo "ZAP scan finished."
+        ls -la
+      displayName: "Run ZAP Scan with Auth (Agent)"
+    - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
+      artifact: 'ZAP_Reports_agent'
+      displayName: 'Publish ZAP Scan Reports (Agent)'
