@@ -20,38 +20,35 @@ parameters:
   - sarif-json
   - traditional-pdf
 
+variables:
 - name: adminUrls
-  displayName: Admin URLs to scan
-  type: object
-  default:
-    - 'https://qa.app-np.neovance.com/clients'
-    - 'https://qa.app-np.neovance.com/user-management/permission-sets'
-    - 'https://qa.app-np.neovance.com/entity-manager'
-    - 'https://qa.app-np.neovance.com/hcp-portal'
-    - 'https://qa.app-np.neovance.com/case-mapping'
-    - 'https://qa.app-np.neovance.com/correspondence/placeholders'
-    - 'https://qa.app-np.neovance.com/correspondence/static-documents'
-    - 'https://qa.app-np.neovance.com/correspondence/document-management'
-    - 'https://qa.app-np.neovance.com/correspondence/template-management'
-    - 'https://qa.app-np.neovance.com/correspondence/send-manual-communication'
-    - 'https://qa.app-np.neovance.com/correspondence/correspondence-logs'
-    - 'https://qa.app-np.neovance.com/sla-management'
-    - 'https://qa.app-np.neovance.com/consent-configuration'
-    - 'https://qa.app-np.neovance.com/profile-details'
+  value: |
+    https://qa.app-np.neovance.com/clients
+    https://qa.app-np.neovance.com/user-management/permission-sets
+    https://qa.app-np.neovance.com/entity-manager
+    https://qa.app-np.neovance.com/hcp-portal
+    https://qa.app-np.neovance.com/case-mapping
+    https://qa.app-np.neovance.com/correspondence/placeholders
+    https://qa.app-np.neovance.com/correspondence/static-documents
+    https://qa.app-np.neovance.com/correspondence/document-management
+    https://qa.app-np.neovance.com/correspondence/template-management
+    https://qa.app-np.neovance.com/correspondence/send-manual-communication
+    https://qa.app-np.neovance.com/correspondence/correspondence-logs
+    https://qa.app-np.neovance.com/sla-management
+    https://qa.app-np.neovance.com/consent-configuration
+    https://qa.app-np.neovance.com/profile-details
 
 - name: agentUrls
-  displayName: Agent URLs to scan
-  type: object
-  default:
-    - 'https://qa-agent.app-np.neovance.com/dashboard'
-    - 'https://qa-agent.app-np.neovance.com/entities/2144'
-    - 'https://qa-agent.app-np.neovance.com/my-cases/32/1395/36'
-    - 'https://qa-agent.app-np.neovance.com/my-tasks/1127/1318/37'
-    - 'https://qa-agent.app-np.neovance.com/manage-queue/dynamic-queue/32/1394/207'
-    - 'https://qa-agent.app-np.neovance.com/manage-queue/dynamic-queue/32/1394/2'
-    - 'https://qa-agent.app-np.neovance.com/correspondence/correspondence-logs/outbound/3607'
-    - 'https://qa-agent.app-np.neovance.com/interaction'
-    - 'https://qa-agent.app-np.neovance.com/permission-assignment'
+  value: |
+    https://qa-agent.app-np.neovance.com/dashboard
+    https://qa-agent.app-np.neovance.com/entities/2144
+    https://qa-agent.app-np.neovance.com/my-cases/32/1395/36
+    https://qa-agent.app-np.neovance.com/my-tasks/1127/1318/37
+    https://qa-agent.app-np.neovance.com/manage-queue/dynamic-queue/32/1394/207
+    https://qa-agent.app-np.neovance.com/manage-queue/dynamic-queue/32/1394/2
+    https://qa-agent.app-np.neovance.com/correspondence/correspondence-logs/outbound/3607
+    https://qa-agent.app-np.neovance.com/interaction
+    https://qa-agent.app-np.neovance.com/permission-assignment
 
 stages:
 - stage: Auth_Login
@@ -121,14 +118,23 @@ stages:
         cd $ARTIFACT_DIR
         AUTOMATION_FILE="automation.yaml"
 
+        # Create automation.yaml file
         cat <<'EOF' > $AUTOMATION_FILE
         env:
           contexts:
             - name: 'admin'
               urls:
-        ${{ each url in parameters.adminUrls }}:
-                - '${{ url }}'
-        ${{ end }}
+        EOF
+
+        # Add URLs from variable to the automation file
+        echo "$(adminUrls)" | while IFS= read -r url; do
+          if [ -n "$url" ]; then
+            echo "                - '$url'" >> $AUTOMATION_FILE
+          fi
+        done
+
+        # Continue with the rest of the automation config
+        cat <<'EOF' >> $AUTOMATION_FILE
               authentication:
                 method: manual
               users:
@@ -161,8 +167,10 @@ stages:
                 reportFile: 'zap_report_admin_${{ parameters.scanType }}.json'
         EOF
 
-
         cp $(Pipeline.Workspace)/PlaywrightSessionAdmin/admin-session.json session.json
+
+        echo "Generated automation.yaml:"
+        cat $AUTOMATION_FILE
 
         docker run --rm \
           -v $(pwd):/zap/wrk/:rw \
@@ -191,14 +199,23 @@ stages:
         cd $ARTIFACT_DIR
         AUTOMATION_FILE="automation.yaml"
 
+        # Create automation.yaml file
         cat <<'EOF' > $AUTOMATION_FILE
         env:
           contexts:
             - name: 'agent'
               urls:
-        ${{ each url in parameters.agentUrls }}:
-                - '${{ url }}'
-        ${{ end }}
+        EOF
+
+        # Add URLs from variable to the automation file
+        echo "$(agentUrls)" | while IFS= read -r url; do
+          if [ -n "$url" ]; then
+            echo "                - '$url'" >> $AUTOMATION_FILE
+          fi
+        done
+
+        # Continue with the rest of the automation config
+        cat <<'EOF' >> $AUTOMATION_FILE
               authentication:
                 method: manual
               users:
@@ -232,6 +249,9 @@ stages:
         EOF
 
         cp $(Pipeline.Workspace)/PlaywrightSessionAgent/agent-session.json session.json
+
+        echo "Generated automation.yaml:"
+        cat $AUTOMATION_FILE
 
         docker run --rm \
           -v $(pwd):/zap/wrk/:rw \
