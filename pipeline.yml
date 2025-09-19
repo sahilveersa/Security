@@ -61,9 +61,13 @@ stages:
     displayName: "Run Playwright login and save session (Admin)"
     pool:
       vmImage: 'ubuntu-latest'
-    container: mcr.microsoft.com/playwright:v1.40.0-jammy
     steps:
+    - task: UseNode@1
+      inputs:
+        version: '18.x'
     - script: |
+        npm install -D @playwright/test
+        npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
           --url "https://qa.app-np.neovance.com/" \
@@ -80,9 +84,13 @@ stages:
     displayName: "Run Playwright login and save session (Agent)"
     pool:
       vmImage: 'ubuntu-latest'
-    container: mcr.microsoft.com/playwright:v1.40.0-jammy
     steps:
+    - task: UseNode@1
+      inputs:
+        version: '18.x'
     - script: |
+        npm install -D @playwright/test
+        npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
           --url "https://qa-agent.app-np.neovance.com/" \
