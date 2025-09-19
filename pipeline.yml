@@ -114,88 +114,12 @@ stages:
     steps:
     - download: current
       artifact: PlaywrightSessionAdmin
-    - script: |
-        echo "Starting ZAP Scan for admin..."
-        ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
-        mkdir -p $ARTIFACT_DIR
-        cd $ARTIFACT_DIR
-        AUTOMATION_FILE="automation.yaml"
-
-        # Create automation.yaml file
-        cat <<'EOF' > $AUTOMATION_FILE
-        env:
-          contexts:
-            - name: 'admin'
-              urls:
-        EOF
-
-        # Add URLs from parameter to the automation file
-        echo '${{ parameters.adminUrls }}' | while IFS= read -r url; do
-          if [ -n "$url" ] && [[ "$url" =~ ^https?:// ]]; then
-            echo "                - '$url'" >> $AUTOMATION_FILE
-          fi
-        done
-
-        # Continue with the rest of the automation config
-        cat <<'EOF' >> $AUTOMATION_FILE
-              authentication:
-                method: manual
-              users:
-                - name: 'ci-user'
-                  credentials:
-                    session: '/zap/wrk/session.json'
-          parameters:
-            failOnError: true
-            failOnWarning: false
-            progressToStdout: true
-          jobs:
-            - type: spider
-              parameters:
-                context: 'admin'
-                user: 'ci-user'
-            - type: passiveScan-wait
-            - type: activeScan
-              parameters:
-                context: 'admin'
-                user: 'ci-user'
-            - type: report
-              parameters:
-                template: 'traditional-json'
-                reportDir: '/zap/wrk/'
-                reportFile: 'zap_report_admin_${{ parameters.scanType }}.json'
-        EOF
-
-        # Add additional report format if different from JSON
-        if [ '${{ parameters.reportTemplate }}' != 'traditional-json' ]; then
-          cat <<'EOF' >> $AUTOMATION_FILE
-            - type: report
-              parameters:
-                template: '${{ parameters.reportTemplate }}'
-                reportDir: '/zap/wrk/'
-                reportFile: 'zap_report_admin_${{ parameters.scanType }}'
-        EOF
-        fi
-
-        cp $(Pipeline.Workspace)/PlaywrightSessionAdmin/admin-session.json session.json
-
-        echo "Generated automation.yaml:"
-        cat $AUTOMATION_FILE
-
-        docker run --rm \
-          -v $(pwd):/zap/wrk/:rw \
-          --user root \
-          ghcr.io/zaproxy/zaproxy:stable \
-          zap.sh -cmd \
-          -addonupdate \
-          -addoninstall reports \
-          -autorun /zap/wrk/$AUTOMATION_FILE
-
-        echo "ZAP scan finished."
-        ls -la
-      displayName: "Run ZAP Scan with Auth (Admin)"
-    - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
-      artifact: 'ZAP_Reports_admin'
-      displayName: 'Publish ZAP Scan Reports (Admin)'
+    - template: zap-template.yml
+      parameters:
+        targetUrls: ${{ parameters.adminUrls }}
+        appName: 'admin'
+        scanType: ${{ parameters.scanType }}
+        reportTemplate: ${{ parameters.reportTemplate }}
 
   - job: AgentScan
     displayName: "ZAP Scan - Agent"
@@ -204,85 +128,9 @@ stages:
     steps:
     - download: current
       artifact: PlaywrightSessionAgent
-    - script: |
-        echo "Starting ZAP Scan for agent..."
-        ARTIFACT_DIR="$(Build.ArtifactStagingDirectory)/zap-reports"
-        mkdir -p $ARTIFACT_DIR
-        cd $ARTIFACT_DIR
-        AUTOMATION_FILE="automation.yaml"
-
-        # Create automation.yaml file
-        cat <<'EOF' > $AUTOMATION_FILE
-        env:
-          contexts:
-            - name: 'agent'
-              urls:
-        EOF
-
-        # Add URLs from parameter to the automation file
-        echo '${{ parameters.agentUrls }}' | while IFS= read -r url; do
-          if [ -n "$url" ] && [[ "$url" =~ ^https?:// ]]; then
-            echo "                - '$url'" >> $AUTOMATION_FILE
-          fi
-        done
-
-        # Continue with the rest of the automation config
-        cat <<'EOF' >> $AUTOMATION_FILE
-              authentication:
-                method: manual
-              users:
-                - name: 'ci-user'
-                  credentials:
-                    session: '/zap/wrk/session.json'
-          parameters:
-            failOnError: true
-            failOnWarning: false
-            progressToStdout: true
-          jobs:
-            - type: spider
-              parameters:
-                context: 'agent'
-                user: 'ci-user'
-            - type: passiveScan-wait
-            - type: activeScan
-              parameters:
-                context: 'agent'
-                user: 'ci-user'
-            - type: report
-              parameters:
-                template: 'traditional-json'
-                reportDir: '/zap/wrk/'
-                reportFile: 'zap_report_agent_${{ parameters.scanType }}.json'
-        EOF
-
-        # Add additional report format if different from JSON
-        if [ '${{ parameters.reportTemplate }}' != 'traditional-json' ]; then
-          cat <<'EOF' >> $AUTOMATION_FILE
-            - type: report
-              parameters:
-                template: '${{ parameters.reportTemplate }}'
-                reportDir: '/zap/wrk/'
-                reportFile: 'zap_report_agent_${{ parameters.scanType }}'
-        EOF
-        fi
-
-        cp $(Pipeline.Workspace)/PlaywrightSessionAgent/agent-session.json session.json
-
-        echo "Generated automation.yaml:"
-        cat $AUTOMATION_FILE
-
-        docker run --rm \
-          -v $(pwd):/zap/wrk/:rw \
-          --user root \
-          ghcr.io/zaproxy/zaproxy:stable \
-          zap.sh -cmd \
-          -addonupdate \
-          -addoninstall reports \
-          -autorun /zap/wrk/$AUTOMATION_FILE
-
-        echo "ZAP scan finished."
-        ls -la
-      displayName: "Run ZAP Scan with Auth (Agent)"
-    - publish: '$(Build.ArtifactStagingDirectory)/zap-reports'
-      artifact: 'ZAP_Reports_agent'
-      displayName: 'Publish ZAP Scan Reports (Agent)'
+    - template: zap-template.yml
+      parameters:
+        targetUrls: ${{ parameters.agentUrls }}
+        appName: 'agent'
+        scanType: ${{ parameters.scanType }}
+        reportTemplate: ${{ parameters.reportTemplate }}
