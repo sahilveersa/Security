@@ -20,9 +20,10 @@ parameters:
   - sarif-json
   - traditional-pdf
 
-variables:
 - name: adminUrls
-  value: |
+  displayName: Admin URLs to scan (one per line)
+  type: string
+  default: |
     https://qa.app-np.neovance.com/clients
     https://qa.app-np.neovance.com/user-management/permission-sets
     https://qa.app-np.neovance.com/entity-manager
@@ -39,7 +40,9 @@ variables:
     https://qa.app-np.neovance.com/profile-details
 
 - name: agentUrls
-  value: |
+  displayName: Agent URLs to scan (one per line)
+  type: string
+  default: |
     https://qa-agent.app-np.neovance.com/dashboard
     https://qa-agent.app-np.neovance.com/entities/2144
     https://qa-agent.app-np.neovance.com/my-cases/32/1395/36
@@ -126,9 +129,9 @@ stages:
               urls:
         EOF
 
-        # Add URLs from variable to the automation file
-        echo "$(adminUrls)" | while IFS= read -r url; do
-          if [ -n "$url" ]; then
+        # Add URLs from parameter to the automation file
+        echo '${{ parameters.adminUrls }}' | while IFS= read -r url; do
+          if [ -n "$url" ] && [[ "$url" =~ ^https?:// ]]; then
             echo "                - '$url'" >> $AUTOMATION_FILE
           fi
         done
@@ -157,15 +160,21 @@ stages:
                 user: 'ci-user'
             - type: report
               parameters:
-                template: '${{ parameters.reportTemplate }}'
-                reportDir: '/zap/wrk/'
-                reportFile: 'zap_report_admin_${{ parameters.scanType }}'
-            - type: report
-              parameters:
                 template: 'traditional-json'
                 reportDir: '/zap/wrk/'
                 reportFile: 'zap_report_admin_${{ parameters.scanType }}.json'
         EOF
+
+        # Add additional report format if different from JSON
+        if [ '${{ parameters.reportTemplate }}' != 'traditional-json' ]; then
+          cat <<'EOF' >> $AUTOMATION_FILE
+            - type: report
+              parameters:
+                template: '${{ parameters.reportTemplate }}'
+                reportDir: '/zap/wrk/'
+                reportFile: 'zap_report_admin_${{ parameters.scanType }}'
+        EOF
+        fi
 
         cp $(Pipeline.Workspace)/PlaywrightSessionAdmin/admin-session.json session.json
 
@@ -207,9 +216,9 @@ stages:
               urls:
         EOF
 
-        # Add URLs from variable to the automation file
-        echo "$(agentUrls)" | while IFS= read -r url; do
-          if [ -n "$url" ]; then
+        # Add URLs from parameter to the automation file
+        echo '${{ parameters.agentUrls }}' | while IFS= read -r url; do
+          if [ -n "$url" ] && [[ "$url" =~ ^https?:// ]]; then
             echo "                - '$url'" >> $AUTOMATION_FILE
           fi
         done
@@ -238,15 +247,21 @@ stages:
                 user: 'ci-user'
             - type: report
               parameters:
-                template: '${{ parameters.reportTemplate }}'
-                reportDir: '/zap/wrk/'
-                reportFile: 'zap_report_agent_${{ parameters.scanType }}'
-            - type: report
-              parameters:
                 template: 'traditional-json'
                 reportDir: '/zap/wrk/'
                 reportFile: 'zap_report_agent_${{ parameters.scanType }}.json'
         EOF
+
+        # Add additional report format if different from JSON
+        if [ '${{ parameters.reportTemplate }}' != 'traditional-json' ]; then
+          cat <<'EOF' >> $AUTOMATION_FILE
+            - type: report
+              parameters:
+                template: '${{ parameters.reportTemplate }}'
+                reportDir: '/zap/wrk/'
+                reportFile: 'zap_report_agent_${{ parameters.scanType }}'
+        EOF
+        fi
 
         cp $(Pipeline.Workspace)/PlaywrightSessionAgent/agent-session.json session.json
 
