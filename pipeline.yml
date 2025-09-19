@@ -121,7 +121,6 @@ stages:
         cd $ARTIFACT_DIR
         AUTOMATION_FILE="automation.yaml"
 
-        # Build YAML list of URLs
         echo "env:" > $AUTOMATION_FILE
         echo "  contexts:" >> $AUTOMATION_FILE
         echo "    - name: 'admin'" >> $AUTOMATION_FILE
