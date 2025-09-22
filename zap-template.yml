@@ -28,8 +28,10 @@ steps:
           urls:
     EOF
 
-    # Add URLs from parameter to the automation file
-    echo '${{ parameters.targetUrls }}' | while IFS= read -r url; do
+    # Add URLs from parameter to the automation file (comma separated)
+    IFS=',' read -ra urls <<< "${{ parameters.targetUrls }}"
+    for url in "${urls[@]}"; do
+      url=$(echo "$url" | xargs) # trim whitespace
       if [ -n "$url" ] && [[ "$url" =~ ^https?:// ]]; then
         echo "            - '$url'" >> $AUTOMATION_FILE
       fi

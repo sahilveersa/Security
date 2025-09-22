@@ -13,7 +13,7 @@ for (let i = 0; i < args.length; i += 2) {
 const url = options.url;
 const email = options.email;
 const password = options.password;
-const mfaSecret = options.mfaSecret;   // Base32 secret key from your authenticator app setup
+const mfaSecret = options.mfaSecret;   // Base32 secret key
 const outputFile = options.output || 'session.json';
 
 if (!url || !email || !password || !mfaSecret) {
@@ -22,7 +22,7 @@ if (!url || !email || !password || !mfaSecret) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true }); // change to false for debugging
+  const browser = await chromium.launch({ headless: true }); 
   const context = await browser.newContext();
   const page = await context.newPage();
 
