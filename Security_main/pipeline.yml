@@ -43,7 +43,7 @@ stages:
       inputs:
         version: '18.x'
     - script: |
-        npm ci
+        npm install
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
@@ -67,7 +67,7 @@ stages:
       inputs:
         version: '18.x'
     - script: |
-        npm ci
+        npm install
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
