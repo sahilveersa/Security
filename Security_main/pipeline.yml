@@ -52,7 +52,7 @@ stages:
           --password "$(QA_ADMIN_PASSWORD)" \
           --mfaSecret "$(QA_ADMIN_MFA_SECRET)" \
           --output "$(Build.ArtifactStagingDirectory)/auth/admin-session.json"
-      workingDirectory: security-main    
+      workingDirectory: .    
       displayName: "Run Playwright login (Admin)"
     - publish: '$(Build.ArtifactStagingDirectory)/auth/admin-session.json'
       artifact: 'PlaywrightSessionAdmin'
@@ -76,7 +76,7 @@ stages:
           --password "$(QA_AGENT_PASSWORD)" \
           --mfaSecret "$(QA_AGENT_MFA_SECRET)" \
           --output "$(Build.ArtifactStagingDirectory)/auth/agent-session.json"
-      workingDirectory: security-main
+      workingDirectory: .
       displayName: "Run Playwright login (Agent)"
     - publish: '$(Build.ArtifactStagingDirectory)/auth/agent-session.json'
       artifact: 'PlaywrightSessionAgent'
