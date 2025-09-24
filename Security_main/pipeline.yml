@@ -87,7 +87,7 @@ stages:
   dependsOn: Auth_Login
   jobs:
   - job: AdminScan
-    displayName: "ZAP Scan - Admin"
+    displayName: "ZAP Scan - For Admin"
     pool:
       vmImage: 'ubuntu-latest'
     steps:
