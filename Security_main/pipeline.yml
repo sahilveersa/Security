@@ -43,7 +43,7 @@ stages:
       inputs:
         version: '18.x'
     - script: |
-        npm install -D @playwright/test
+        npm ci
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
@@ -52,6 +52,7 @@ stages:
           --password "$(QA_ADMIN_PASSWORD)" \
           --mfaSecret "$(QA_ADMIN_MFA_SECRET)" \
           --output "$(Build.ArtifactStagingDirectory)/auth/admin-session.json"
+      workingDirectory: security-main    
       displayName: "Run Playwright login (Admin)"
     - publish: '$(Build.ArtifactStagingDirectory)/auth/admin-session.json'
       artifact: 'PlaywrightSessionAdmin'
@@ -66,7 +67,7 @@ stages:
       inputs:
         version: '18.x'
     - script: |
-        npm install -D @playwright/test
+        npm ci
         npx playwright install --with-deps
         mkdir -p $(Build.ArtifactStagingDirectory)/auth
         node playwright-login.js \
@@ -75,6 +76,7 @@ stages:
           --password "$(QA_AGENT_PASSWORD)" \
           --mfaSecret "$(QA_AGENT_MFA_SECRET)" \
           --output "$(Build.ArtifactStagingDirectory)/auth/agent-session.json"
+      workingDirectory: security-main
       displayName: "Run Playwright login (Agent)"
     - publish: '$(Build.ArtifactStagingDirectory)/auth/agent-session.json'
       artifact: 'PlaywrightSessionAgent'
